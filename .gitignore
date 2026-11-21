@@ -1,0 +1,42 @@
+# ---- 构建产物 ----
+build/
+app/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+captures/
+.externalNativeBuild/
+.cxx/
+
+# ---- Gradle ----
+.gradle/
+.kotlin/
+
+# ---- 本机配置（含绝对路径）----
+local.properties
+*.properties.local
+
+# ---- 签名材料：绝不入库 ----
+*.jks
+*.keystore
+keystore/
+*.p12
+*.pfx
+*.pem
+signing.properties
+
+# ---- IDE ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+*.log
+
+# ---- 分发目录：APK 走 GitHub Release，不进版本历史 ----
+dist/
