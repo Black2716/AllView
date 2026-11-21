@@ -26,6 +26,10 @@
 |---|---|
 | ![首启空态](docs/03-empty.png) | ![浅色长文](docs/04-book-light.png) |
 
+![LaTeX 公式渲染](docs/05-math.png)
+
+分式、上下标、求最值的上下限、定界符、根号、重音、希腊字母与关系符均为原生排版，不走 WebView。
+
 截图位于 [`docs/`](docs/)，用仓库相对路径引用（`![说明](docs/文件名.png)`），无需外部图床。
 
 ## 二、工程目录结构
@@ -44,10 +48,14 @@ ModuReader/
 │   ├── 01-dark.png                      # 深色模式
 │   ├── 02-table-image.png               # 表格 + 图片
 │   ├── 03-empty.png                     # 首启空态
-│   └── 04-book-light.png                # 浅色模式长文
+│   ├── 04-book-light.png                # 浅色模式长文
+│   ├── 05-math.png                      # LaTeX 公式渲染
+│   ├── manual-1-git-bash.md             # Git Bash 终端操作手册
+│   └── manual-2-sidebar-git.md          # 侧边栏 Git 操作手册
 ├── sample/
 │   ├── sample.md                        # 9.2 万字真实长文（验收用）
 │   ├── demo.md                          # 全元素覆盖的最小样例
+│   ├── math.md                          # 公式语法回归样例
 │   └── pic.png                          # 配合 demo.md 的本地图片
 └── app/
     ├── build.gradle.kts
