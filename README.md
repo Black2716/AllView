@@ -11,11 +11,11 @@
 | 技术栈 | Kotlin + Jetpack Compose（Material 3） |
 | minSdk / targetSdk / compileSdk | 24 / 34 / 34 |
 | 解析内核 | commonmark-java 0.22.0 + GFM Tables |
-| release APK 实测体积 | **1.09 MB**（1,141,595 字节；R8 + 资源压缩，含公式/目录/最近文件） |
+| release APK 实测体积 | **1.18 MB**（1,241,667 字节；R8 + 资源压缩，含公式/目录/搜索/高亮） |
 | debug APK 实测体积 | 7.8 MB（不裁剪，仅用于调试） |
 | 冷启动（Pixel 后端 API 34 模拟器，host GPU） | **302–505 ms**（`Displayed` 打点） |
 | 9.2 万字文档打开到首屏可读 | 约 3.4 s（含 `uiautomator` 轮询开销） |
-| 单测 | **36/36**（9 解析 + 8 公式 + 7 目录 + 6 最近文件 + 6 外部打开） |
+| 单测 | **51/51**（9 解析 + 8 公式 + 7 目录 + 6 最近文件 + 6 外部打开 + 7 搜索 + 8 高亮） |
 
 ## 一、界面截图
 
@@ -76,7 +76,9 @@ ModuReader/
         │       ├── md/
         │       │   ├── MdModel.kt              # 只读 AST：MdBlock / MdInline
         │       │   ├── MdParser.kt             # commonmark -> AST 一次性转换
-        │       │   └── MdToc.kt                # 目录抽取 + GitHub slug
+        │       │   ├── MdToc.kt                # 目录抽取 + GitHub slug
+        │       │   ├── SearchIndex.kt          # 全文搜索索引（偏移表 + 二分）
+        │       │   └── CodeHighlighter.kt      # 4 种语言的轻量词法高亮
         │       ├── data/
         │       │   ├── DocRepository.kt        # SAF Uri -> UTF-8 -> AST
         │       │   ├── ExternalOpen.kt         # VIEW intent 解析（可单测）
@@ -90,6 +92,7 @@ ModuReader/
         │           ├── ReaderScreen.kt         # LazyColumn 阅读主界面
         │           ├── MdRenderer.kt           # 块级渲染器（全部元素）
         │           ├── TocSheet.kt             # 目录抽屉（ModalBottomSheet）
+        │           ├── SearchSheet.kt          # 搜索面板（命中列表 + 跳转）
         │           └── SettingsSheet.kt        # 字号 / 外观面板
         └── test/java/com/yg/moduread/
             ├── MdParserTest.kt                 # 9 个解析单测（含真实长文）
@@ -114,6 +117,8 @@ ModuReader/
 | 图片 | 支持 | 块级等比铺满 + 图注；解析相对路径 / `file://` / `content://` |
 | 行内代码 / 粗体 / 斜体 | 支持 | `AnnotatedString` 拼装 |
 | 分隔线 | 支持 | 1dp 细线 |
+| **全文搜索** | 支持 | 命中列表带块号与上下文片段，点击跳转；大小写不敏感，单字查询被拒 |
+| **代码高亮** | 支持 | 手写 tokenizer：kotlin/python/bash/json；未知语言原样输出 |
 | **外部打开** | 支持 | 文件管理器「用墨读打开」；只声明 `text/markdown`，不抢 `.txt` |
 | **最近文件** | 支持 | 空态页列最近 8 本，可单独移除；纯 SharedPreferences，无数据库 |
 | **目录抽屉** | 支持 | 按级别缩进，点击直接跳转；书稿 86 个标题 |
@@ -191,7 +196,7 @@ adb push sample/pic.png   /sdcard/Download/
 
 ```
 app-debug.apk     7.79 MB   （不混淆，仅调试用）
-app-release.apk   1.09 MB   （R8 + shrinkResources；公式 +14 KB，目录/进度 +60 KB，最近文件与外部打开 +3 KB）
+app-release.apk   1.18 MB   （R8 + shrinkResources；公式 +14 KB，目录/进度 +60 KB，最近文件/外部打开 +3 KB，搜索 +37 KB，代码高亮 +63 KB）
 ```
 
 ## 七、性能设计

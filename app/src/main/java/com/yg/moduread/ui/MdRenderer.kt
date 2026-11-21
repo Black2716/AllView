@@ -48,10 +48,13 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.luminance
+import com.yg.moduread.md.CodeHighlighter
 import com.yg.moduread.md.MdAlign
 import com.yg.moduread.md.MdBlock
 import com.yg.moduread.md.MdInline
 import com.yg.moduread.md.MdTableCell
+import com.yg.moduread.md.TokenKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -208,6 +211,27 @@ private fun ListView(
     }
 }
 
+/** 代码高亮配色。深浅色各一套，都从现有主题色衍生，不新增调色板文件。 */
+@Composable
+private fun syntaxColors(): Map<TokenKind, Color> {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    return if (dark) mapOf(
+        TokenKind.PLAIN to Color(0xFFD6D6D6),
+        TokenKind.KEYWORD to Color(0xFF7AA2F7),
+        TokenKind.STRING to Color(0xFF9ECE6A),
+        TokenKind.COMMENT to Color(0xFF6B7089),
+        TokenKind.NUMBER to Color(0xFFE0AF68),
+        TokenKind.FUNCTION to Color(0xFF7DCFFF)
+    ) else mapOf(
+        TokenKind.PLAIN to Color(0xFF24292F),
+        TokenKind.KEYWORD to Color(0xFF2F6FEB),
+        TokenKind.STRING to Color(0xFF116329),
+        TokenKind.COMMENT to Color(0xFF8C959F),
+        TokenKind.NUMBER to Color(0xFF953800),
+        TokenKind.FUNCTION to Color(0xFF0550AE)
+    )
+}
+
 @Composable
 private fun CodeView(block: MdBlock.CodeBlock, baseFontSize: Float, modifier: Modifier) {
     Column(
@@ -227,12 +251,13 @@ private fun CodeView(block: MdBlock.CodeBlock, baseFontSize: Float, modifier: Mo
             )
         }
         SelectionContainer {
+            val colors = syntaxColors()
             Text(
-                text = block.code,
+                text = buildCodeHighlight(block.code, block.language, colors),
                 fontSize = (baseFontSize * 0.86f).sp,
                 lineHeight = (baseFontSize * 0.86f * 1.55f).sp,
                 fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = colors.getValue(TokenKind.PLAIN),
                 softWrap = false,
                 modifier = Modifier.horizontalScroll(rememberScrollState())
             )
@@ -421,6 +446,36 @@ private fun MdText(
             }
         }
     )
+}
+
+/**
+ * 代码块高亮：tokenizer 只给语义类别，这里映射成 SpanStyle。
+ * 未支持的语言直接返回原文，不构造额外的 AnnotatedString。
+ */
+private fun buildCodeHighlight(
+    code: String,
+    language: String?,
+    colors: Map<TokenKind, Color>
+): AnnotatedString {
+    if (!CodeHighlighter.supports(language)) return AnnotatedString(code)
+    val tokens = CodeHighlighter.tokenize(code, language)
+    if (tokens.isEmpty()) return AnnotatedString(code)
+    return buildAnnotatedString {
+        tokens.forEach { token ->
+            val color = colors[token.kind]
+            if (token.kind == TokenKind.PLAIN || color == null) {
+                append(token.text)
+            } else {
+                withStyle(
+                    SpanStyle(
+                        color = color,
+                        fontWeight = if (token.kind == TokenKind.KEYWORD) FontWeight.Medium
+                        else FontWeight.Normal
+                    )
+                ) { append(token.text) }
+            }
+        }
+    }
 }
 
 /** 行内样式拼装：粗体/斜体/行内代码/链接由 AnnotatedString 承载。 */

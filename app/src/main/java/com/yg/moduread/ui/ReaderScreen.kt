@@ -55,6 +55,7 @@ fun ReaderScreen(
     onOpenSettings: () -> Unit,
     onSaveProgress: (Int, Int) -> Unit = { _, _ -> },
     onOpenToc: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
     onAnchor: (String) -> Unit = {},
     /** 最近打开过的文件，空态页列出；点一项直接打开。 */
     recent: List<com.yg.moduread.data.RecentFile> = emptyList(),
@@ -163,6 +164,7 @@ fun ReaderScreen(
                     onFontChange = onFontChange,
                     onOpenSettings = onOpenSettings,
                     onOpenToc = onOpenToc,
+                    onOpenSearch = onOpenSearch,
                     onPickFile = onPickFile,
                     bottomPadding = bottomInsets,
                     modifier = Modifier.align(Alignment.BottomCenter)
@@ -220,6 +222,7 @@ private fun ReaderBottomBar(
     onFontChange: (Float) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenToc: () -> Unit,
+    onOpenSearch: () -> Unit,
     onPickFile: () -> Unit,
     bottomPadding: androidx.compose.ui.unit.Dp,
     modifier: Modifier
@@ -242,6 +245,7 @@ private fun ReaderBottomBar(
             PillButton(text = "A+", onClick = { onFontChange(fontSize + ReaderPrefs.FONT_STEP) })
             Spacer(Modifier.size(4.dp))
             PillButton(text = "目录", onClick = onOpenToc)
+            PillButton(text = "搜索", onClick = onOpenSearch)
             PillButton(text = "设置", onClick = onOpenSettings)
             Spacer(Modifier.weight(1f))
             PillButton(text = "换文件", onClick = onPickFile)

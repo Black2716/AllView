@@ -9,6 +9,7 @@ import com.yg.moduread.data.DocRepository
 import com.yg.moduread.data.RecentFile
 import com.yg.moduread.data.RecentFiles
 import com.yg.moduread.md.MdToc
+import com.yg.moduread.md.SearchIndex
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -108,6 +109,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                     restoreOffset = saved.second,
                     toc = toc,
                     anchors = MdToc.index(toc),
+                    searchIndex = SearchIndex.build(loaded.blocks),
                     loading = false
                 )
                 prefs.edit().putString(KEY_LAST_URI, uri.toString()).apply()

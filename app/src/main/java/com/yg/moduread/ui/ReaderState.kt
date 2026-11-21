@@ -18,6 +18,8 @@ data class DocumentState(
     val toc: List<TocEntry> = emptyList(),
     /** GitHub 风格 slug -> 块索引，供文档内锚点跳转。 */
     val anchors: Map<String, Int> = emptyMap(),
+    /** 全文搜索索引，解析完成时建一次。 */
+    val searchIndex: com.yg.moduread.md.SearchIndex? = null,
     val loading: Boolean = false,
     val error: String? = null
 )

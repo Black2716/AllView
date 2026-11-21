@@ -25,6 +25,7 @@ fun ReaderRoot(vm: ReaderViewModel) {
     val settingsVisible by vm.showSettings.collectAsStateWithLifecycle()
     val recent by vm.recent.collectAsStateWithLifecycle()
     var tocVisible by remember { mutableStateOf(false) }
+    var searchVisible by remember { mutableStateOf(false) }
     val currentIndex = remember(doc.docUri) { mutableStateOf(0) }
 
     val context = LocalContext.current
@@ -77,6 +78,7 @@ fun ReaderRoot(vm: ReaderViewModel) {
                     currentIndex.value = index
                 },
                 onOpenToc = { tocVisible = true },
+                onOpenSearch = { searchVisible = true },
                 // 文档内锚点：#slug -> 块索引 -> 跳转
                 onAnchor = { url ->
                     // body = blocks.drop(1) 且列表 0 号是页首标题项，
@@ -89,6 +91,17 @@ fun ReaderRoot(vm: ReaderViewModel) {
                 onOpenRecent = { uri -> runCatching { Uri.parse(uri) }.getOrNull()?.let(vm::open) },
                 onForgetRecent = vm::forgetRecent
             )
+
+            if (searchVisible) {
+                SearchSheet(
+                    index = doc.searchIndex,
+                    onSelect = { hit ->
+                        searchVisible = false
+                        vm.requestJump(hit.blockIndex)
+                    },
+                    onDismiss = { searchVisible = false }
+                )
+            }
 
             if (tocVisible) {
                 TocSheet(
