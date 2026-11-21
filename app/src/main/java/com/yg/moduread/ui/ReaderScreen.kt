@@ -56,6 +56,10 @@ fun ReaderScreen(
     onSaveProgress: (Int, Int) -> Unit = { _, _ -> },
     onOpenToc: () -> Unit = {},
     onAnchor: (String) -> Unit = {},
+    /** 最近打开过的文件，空态页列出；点一项直接打开。 */
+    recent: List<com.yg.moduread.data.RecentFile> = emptyList(),
+    onOpenRecent: (String) -> Unit = {},
+    onForgetRecent: (String) -> Unit = {},
     /** 一次性跳转目标（列表 item 下标）。消费后必须调 onJumpConsumed 清空。 */
     jumpTarget: Int? = null,
     onJumpConsumed: () -> Unit = {}
@@ -113,7 +117,13 @@ fun ReaderScreen(
     ) {
         when {
             doc.loading && doc.blocks.isEmpty() -> LoadingView()
-            doc.blocks.isEmpty() -> EmptyView(doc.error, onPickFile)
+            doc.blocks.isEmpty() -> EmptyView(
+                error = doc.error,
+                recent = recent,
+                onPickFile = onPickFile,
+                onOpenRecent = onOpenRecent,
+                onForgetRecent = onForgetRecent
+            )
             else -> {
                 LazyColumn(
                     state = listState,
@@ -260,32 +270,117 @@ private fun LoadingView() {
 }
 
 @Composable
-private fun EmptyView(error: String?, onPickFile: () -> Unit) {
-    Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun EmptyView(
+    error: String?,
+    recent: List<com.yg.moduread.data.RecentFile>,
+    onPickFile: () -> Unit,
+    onOpenRecent: (String) -> Unit,
+    onForgetRecent: (String) -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 28.dp, vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "墨读",
+            fontSize = 30.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            text = error ?: "打开一个本地 .md 文件开始阅读",
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(22.dp))
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.primary)
+                .clickable(onClick = onPickFile)
+                .padding(horizontal = 22.dp, vertical = 12.dp)
+        ) {
+            Text(text = "选择文件", fontSize = 15.sp, color = MaterialTheme.colorScheme.onPrimary)
+        }
+
+        if (recent.isNotEmpty()) {
+            Spacer(Modifier.height(30.dp))
             Text(
-                text = "墨读",
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                text = "最近打开",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
             )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = error ?: "打开一个本地 .md 文件开始阅读",
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(22.dp))
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-                    .clickable(onClick = onPickFile)
-                    .padding(horizontal = 22.dp, vertical = 12.dp)
-            ) {
-                Text(text = "选择文件", fontSize = 15.sp, color = MaterialTheme.colorScheme.onPrimary)
+            recent.forEach { file ->
+                RecentRow(
+                    file = file,
+                    onOpen = { onOpenRecent(file.uri) },
+                    onForget = { onForgetRecent(file.uri) }
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun RecentRow(
+    file: com.yg.moduread.data.RecentFile,
+    onOpen: () -> Unit,
+    onForget: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 1.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = file.name,
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = relativeTime(file.openedAt),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        // 长按才能移除太隐蔽，这里给一个显式的「×」
+        Text(
+            text = "×",
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .clickable(onClick = onForget)
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
+}
+
+/** 最近文件的时间显示：不引第三方时间库，按粗粒度分档。 */
+private fun relativeTime(epochMillis: Long): String {
+    val delta = System.currentTimeMillis() - epochMillis
+    if (delta < 0) return "刚刚"
+    val minute = 60_000L
+    val hour = 60 * minute
+    val day = 24 * hour
+    return when {
+        delta < minute -> "刚刚"
+        delta < hour -> (delta / minute).toString() + " 分钟前"
+        delta < day -> (delta / hour).toString() + " 小时前"
+        delta < 7 * day -> (delta / day).toString() + " 天前"
+        else -> (delta / (7 * day)).toString() + " 周前"
     }
 }

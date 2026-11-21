@@ -25,6 +25,21 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!--
+                从文件管理器 / 其他 App 直接「用墨读打开」。
+                只声明 Markdown 的两种 MIME，不抢 text/plain ——否则所有 .txt
+                都会出现在「打开方式」里，对只读 Markdown 阅读器是噪音。
+            -->
+            <intent-filter android:label="@string/open_with_md">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="text/x-markdown" />
+            </intent-filter>
         </activity>
     </application>
 

@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">墨读</string>
+    <string name="open_with_md">用墨读打开</string>
 </resources>

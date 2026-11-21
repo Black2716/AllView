@@ -11,12 +11,11 @@
 | 技术栈 | Kotlin + Jetpack Compose（Material 3） |
 | minSdk / targetSdk / compileSdk | 24 / 34 / 34 |
 | 解析内核 | commonmark-java 0.22.0 + GFM Tables |
-| release APK 实测体积 | **1.09 MB**（R8 + 资源压缩，含公式渲染与目录） |
+| release APK 实测体积 | **1.09 MB**（1,141,595 字节；R8 + 资源压缩，含公式/目录/最近文件） |
 | debug APK 实测体积 | 7.8 MB（不裁剪，仅用于调试） |
 | 冷启动（Pixel 后端 API 34 模拟器，host GPU） | **302–505 ms**（`Displayed` 打点） |
 | 9.2 万字文档打开到首屏可读 | 约 3.4 s（含 `uiautomator` 轮询开销） |
-| 单测 | **24/24**（9 解析 + 8 公式 + 7 目录） |
-| 单测 | **24/24**（9 解析 + 8 公式 + 7 目录） |
+| 单测 | **36/36**（9 解析 + 8 公式 + 7 目录 + 6 最近文件 + 6 外部打开） |
 
 ## 一、界面截图
 
@@ -80,6 +79,8 @@ ModuReader/
         │       │   └── MdToc.kt                # 目录抽取 + GitHub slug
         │       ├── data/
         │       │   ├── DocRepository.kt        # SAF Uri -> UTF-8 -> AST
+        │       │   ├── ExternalOpen.kt         # VIEW intent 解析（可单测）
+        │       │   ├── RecentFiles.kt          # 最近 8 本，无数据库
         │       │   └── MdImageResolver.kt      # 相对路径图片定位（本地）
         │       └── ui/
         │           ├── Theme.kt                # 浅/深双主题 + 系统栏反色
@@ -89,10 +90,13 @@ ModuReader/
         │           ├── ReaderScreen.kt         # LazyColumn 阅读主界面
         │           ├── MdRenderer.kt           # 块级渲染器（全部元素）
         │           ├── TocSheet.kt             # 目录抽屉（ModalBottomSheet）
-│           ├── TocSheet.kt             # 目录抽屉
         │           └── SettingsSheet.kt        # 字号 / 外观面板
         └── test/java/com/yg/moduread/
-            └── MdParserTest.kt                 # 9 个解析单测（含真实长文）
+            ├── MdParserTest.kt                 # 9 个解析单测（含真实长文）
+            ├── LatexTest.kt                    # 8 个公式单测
+            ├── MdTocTest.kt                    # 7 个目录单测（含书稿 11 锚点真值）
+            ├── RecentFilesTest.kt              # 6 个最近文件单测
+            └── ExternalOpenTest.kt             # 6 个外部打开判据单测
 ```
 
 ## 三、渲染支持
@@ -110,10 +114,11 @@ ModuReader/
 | 图片 | 支持 | 块级等比铺满 + 图注；解析相对路径 / `file://` / `content://` |
 | 行内代码 / 粗体 / 斜体 | 支持 | `AnnotatedString` 拼装 |
 | 分隔线 | 支持 | 1dp 细线 |
+| **外部打开** | 支持 | 文件管理器「用墨读打开」；只声明 `text/markdown`，不抢 `.txt` |
+| **最近文件** | 支持 | 空态页列最近 8 本，可单独移除；纯 SharedPreferences，无数据库 |
 | **目录抽屉** | 支持 | 按级别缩进，点击直接跳转；书稿 86 个标题 |
 | **文档内锚点** | 支持 | `[文本](#slug)` 按 GitHub slug 规则解析后跳转 |
 | **阅读进度记忆** | 支持 | 按文档分别记住滚动位置，杀进程重开回到原处 |
-| **目录抽屉** | 支持 | 按级别缩进，点击直接跳转；书稿 86 个标题 |
 | **文档内锚点** `[文本](#slug)` | 支持 | 按 GitHub slug 规则解析后跳转 |
 | **阅读进度记忆** | 支持 | 按文档分别记住滚动位置，杀进程重开回到原处 |
 | **块级公式** `$$…$$` | 支持 | 原生排版：分式（自适应分数线）、上下标、求和/求积/最值的上下限、定界符、根号、重音、箭头 |
@@ -186,7 +191,7 @@ adb push sample/pic.png   /sdcard/Download/
 
 ```
 app-debug.apk     7.79 MB   （不混淆，仅调试用）
-app-release.apk   1.09 MB   （R8 + shrinkResources；公式 +14 KB，目录/进度 +60 KB）
+app-release.apk   1.09 MB   （R8 + shrinkResources；公式 +14 KB，目录/进度 +60 KB，最近文件与外部打开 +3 KB）
 ```
 
 ## 七、性能设计

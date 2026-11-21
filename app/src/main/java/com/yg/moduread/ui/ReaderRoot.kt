@@ -23,6 +23,7 @@ fun ReaderRoot(vm: ReaderViewModel) {
     val doc by vm.doc.collectAsStateWithLifecycle()
     val prefs by vm.readerPrefs.collectAsStateWithLifecycle()
     val settingsVisible by vm.showSettings.collectAsStateWithLifecycle()
+    val recent by vm.recent.collectAsStateWithLifecycle()
     var tocVisible by remember { mutableStateOf(false) }
     val currentIndex = remember(doc.docUri) { mutableStateOf(0) }
 
@@ -83,7 +84,10 @@ fun ReaderRoot(vm: ReaderViewModel) {
                     vm.resolveAnchor(url)?.let(vm::requestJump)
                 },
                 jumpTarget = vm.jumpTo.collectAsStateWithLifecycle().value,
-                onJumpConsumed = vm::consumeJump
+                onJumpConsumed = vm::consumeJump,
+                recent = recent,
+                onOpenRecent = { uri -> runCatching { Uri.parse(uri) }.getOrNull()?.let(vm::open) },
+                onForgetRecent = vm::forgetRecent
             )
 
             if (tocVisible) {

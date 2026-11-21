@@ -6,6 +6,8 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yg.moduread.data.DocRepository
+import com.yg.moduread.data.RecentFile
+import com.yg.moduread.data.RecentFiles
 import com.yg.moduread.md.MdToc
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +18,10 @@ import kotlinx.coroutines.launch
 class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = app.getSharedPreferences("moduread", Application.MODE_PRIVATE)
+    private val recentFiles = RecentFiles(prefs)
+
+    private val _recent = MutableStateFlow(recentFiles.list())
+    val recent: StateFlow<List<RecentFile>> = _recent.asStateFlow()
 
     private val _doc = MutableStateFlow(DocumentState())
     val doc: StateFlow<DocumentState> = _doc.asStateFlow()
@@ -54,12 +60,26 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     private var restoreStarted = false
 
     /**
+     * 冷启动时由 MainActivity 塞进来的外部打开请求（文件管理器 / 其他 App 的 VIEW）。
+     * 界面首帧后再消费，避免和「续读上次文件」抢同一条加载路径。
+     */
+    var pendingExternalUri: Uri? = null
+
+    /**
      * 续读上次的文件。刻意不在 init 里触发：
      * 首帧只绘制空态骨架，等界面真正显示后再读文件，冷启动路径上没有 IO 与解析。
      */
     fun restoreLastIfNeeded() {
         if (restoreStarted) return
         restoreStarted = true
+
+        // 从外部打开优先于「续读上次文件」：用户明确点了某个文件
+        pendingExternalUri?.let { uri ->
+            pendingExternalUri = null
+            open(uri)
+            return
+        }
+
         val last = prefs.getString(KEY_LAST_URI, null) ?: return
         runCatching { Uri.parse(last) }.getOrNull()?.let { open(it, silent = true) }
     }
@@ -91,9 +111,11 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                     loading = false
                 )
                 prefs.edit().putString(KEY_LAST_URI, uri.toString()).apply()
+                recentFiles.remember(uri.toString(), loaded.title)
+                _recent.value = recentFiles.list()
             }.onFailure { e ->
                 _doc.update {
-                    it.copy(loading = false, error = if (silent) null else (e.message ?: "打开失败"))
+                    it.copy(loading = false, error = if (silent) null else friendlyError(e))
                 }
             }
         }
@@ -121,6 +143,36 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     /** uri 可能很长，用 hashCode 做键；碰撞概率对「记住几本书的位置」这个用途无影响。 */
     private fun progressKey(uri: String): String = uri.hashCode().toString()
+
+    /**
+     * 打开失败的原因翻译成人话。
+     * 系统抛的 SecurityException 是一大段英文加完整 uri，
+     * 直接摊在空态页上既看不懂也难看。
+     */
+    private fun friendlyError(e: Throwable): String {
+        val raw = e.message.orEmpty()
+        return when {
+            e is SecurityException || raw.contains("Permission Denial", true) ||
+                raw.contains("requires that you obtain access", true) ->
+                "这个文件没有被授权访问。\n点「选择文件」重新选一次即可（从外部打开时若被拒绝，也需要这样授权一次）。"
+
+            e is java.io.FileNotFoundException || raw.contains("No such file", true) ||
+                raw.contains("ENOENT", true) ->
+                "文件找不到了，可能已被移动或删除。"
+
+            raw.contains("EACCES", true) -> "没有读取该文件的权限。"
+
+            raw.isBlank() -> "打开失败，请重试。"
+
+            // 兜底：只保留第一行，避免长堆栈式文本铺满屏幕
+            else -> raw.lineSequence().firstOrNull()?.take(120) ?: "打开失败，请重试。"
+        }
+    }
+
+    fun forgetRecent(uri: String) {
+        recentFiles.forget(uri)
+        _recent.value = recentFiles.list()
+    }
 
     fun clearDocument() {
         _doc.value = DocumentState()
