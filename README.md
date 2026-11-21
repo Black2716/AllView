@@ -11,7 +11,7 @@
 | 技术栈 | Kotlin + Jetpack Compose（Material 3） |
 | minSdk / targetSdk / compileSdk | 24 / 34 / 34 |
 | 解析内核 | commonmark-java 0.22.0 + GFM Tables |
-| release APK 实测体积 | **1.18 MB**（1,241,667 字节；R8 + 资源压缩，含公式/目录/搜索/高亮） |
+| release APK 实测体积 | **1.20 MB**（1,255,811 字节；R8 + 资源压缩，含公式/目录/搜索/高亮与图标化界面） |
 | debug APK 实测体积 | 7.8 MB（不裁剪，仅用于调试） |
 | 冷启动（Pixel 后端 API 34 模拟器，host GPU） | **302–505 ms**（`Displayed` 打点） |
 | 9.2 万字文档打开到首屏可读 | 约 3.4 s（含 `uiautomator` 轮询开销） |
@@ -26,6 +26,12 @@
 | 首启空态 | 浅色长文 |
 |---|---|
 | ![首启空态](docs/03-empty.png) | ![浅色长文](docs/04-book-light.png) |
+
+| 浅色 · 图标化底栏 | 深色 |
+|---|---|
+| ![浅色界面](docs/08-ui-light.png) | ![深色界面](docs/06-ui-dark.png) |
+
+![字号浮层](docs/07-font-panel.png)
 
 ![LaTeX 公式渲染](docs/05-math.png)
 
@@ -190,13 +196,15 @@ adb push sample/pic.png   /sdcard/Download/
 | 自研 `Latex.kt` + `MathView.kt` | LaTeX 子集解析与排版 | 约 60 KB（无第三方公式库，不引入 KaTeX/MathJax/WebView） |
 | `junit:junit:4.13.2` | 单测（不打进包） | 0 |
 
-未引入：图片加载库（Coil/Glide，省 0.6–1.2 MB）、导航库、DI 框架、WebView、Splash 库、公式渲染库（KaTeX/MathJax 走 WebView 会让包体涨 2 MB+ 并引入 JS 引擎）。
+图标同理：试过 `res/drawable` + `painterResource`（+70 KB，会把 Compose 矢量解析引擎整包拖进来）和内存 `ImageVector`（+39 KB，引擎仍在），最终改用 `Canvas` 直绘（+14 KB）。
+
+未引入：图片加载库（Coil/Glide，省 0.6–1.2 MB）、导航库、DI 框架、WebView、Splash 库、公式渲染库、图标库（KaTeX/MathJax 走 WebView 会让包体涨 2 MB+ 并引入 JS 引擎）。
 
 实测产物：
 
 ```
 app-debug.apk     7.79 MB   （不混淆，仅调试用）
-app-release.apk   1.18 MB   （R8 + shrinkResources；公式 +14 KB，目录/进度 +60 KB，最近文件/外部打开 +3 KB，搜索 +37 KB，代码高亮 +63 KB）
+app-release.apk   1.20 MB   （R8 + shrinkResources；公式 +14 KB，目录/进度 +60 KB，最近文件/外部打开 +3 KB，搜索 +37 KB，代码高亮 +63 KB，界面重做 +14 KB）
 ```
 
 ## 七、性能设计

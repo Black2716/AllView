@@ -71,7 +71,7 @@ fun SearchSheet(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("搜索全文", fontSize = 14.sp) },
+                placeholder = { Text("搜索全文", fontSize = Type.bodyLarge) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { }),
@@ -88,7 +88,7 @@ fun SearchSheet(
                     Text(
                         text = if (hits.size >= 200) "命中超过 200 条，只显示前 200 条"
                         else hits.size.toString() + " 处命中",
-                        fontSize = 12.sp,
+                        fontSize = Type.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
@@ -113,7 +113,7 @@ private fun Hint(text: String) {
         Modifier.fillMaxWidth().padding(vertical = 26.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        Text(text, fontSize = Type.body, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
     }
 }
 
@@ -123,7 +123,7 @@ private fun HitRow(hit: SearchHit, query: String, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .padding(vertical = 1.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(Shapes.chip)
             .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 9.dp)
@@ -131,14 +131,14 @@ private fun HitRow(hit: SearchHit, query: String, onClick: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "§" + (hit.blockIndex + 1),
-                fontSize = 11.sp,
+                fontSize = Type.label,
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Medium
             )
             Spacer(Modifier.width(8.dp))
             Text(
                 text = snippet(hit, query),
-                fontSize = 13.sp,
+                fontSize = Type.body,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis

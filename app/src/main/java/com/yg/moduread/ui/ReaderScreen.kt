@@ -22,9 +22,21 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.yg.moduread.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -38,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -104,6 +117,9 @@ fun ReaderScreen(
         onJumpConsumed()
     }
 
+    // 字号浮层的开合状态。放这里而不是每个按钮里，切换文档时保持用户的选择
+    var fontPanelOpen by remember { mutableStateOf(false) }
+
     // 位置变化后节流 1 秒落盘，避免每帧都写 SharedPreferences
     LaunchedEffect(listState, doc.docUri) {
         snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
@@ -160,8 +176,8 @@ fun ReaderScreen(
                     )
                 }
                 ReaderBottomBar(
-                    fontSize = prefs.fontSizeSp,
-                    onFontChange = onFontChange,
+                    fontPanelOpen = fontPanelOpen,
+                    onToggleFontPanel = { fontPanelOpen = !fontPanelOpen },
                     onOpenSettings = onOpenSettings,
                     onOpenToc = onOpenToc,
                     onOpenSearch = onOpenSearch,
@@ -169,6 +185,35 @@ fun ReaderScreen(
                     bottomPadding = bottomInsets,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
+
+                // 字号浮层：从底部栏之上滑出，拖动即时生效。
+                // 用 animation-core 的 animateFloatAsState + graphicsLayer 而不是
+                // AnimatedVisibility —— 后者会把整个 androidx.compose.animation
+                // 模块拖进包体（实测约 +50 KB dex），而这个淡入淡出用 core 就够。
+                val panelAlpha by animateFloatAsState(
+                    targetValue = if (fontPanelOpen) 1f else 0f,
+                    animationSpec = tween(140),
+                    label = "fontPanelAlpha"
+                )
+                val panelShift by animateFloatAsState(
+                    targetValue = if (fontPanelOpen) 0f else 12f,
+                    animationSpec = tween(160),
+                    label = "fontPanelShift"
+                )
+                if (fontPanelOpen || panelAlpha > 0.01f) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 52.dp + bottomInsets)
+                            .graphicsLayer { alpha = panelAlpha; translationY = panelShift }
+                    ) {
+                        FontPanel(
+                            fontSize = prefs.fontSizeSp,
+                            onFontChange = onFontChange,
+                            onDismiss = { fontPanelOpen = false }
+                        )
+                    }
+                }
             }
         }
     }
@@ -216,10 +261,19 @@ private fun TopBar(title: String, modifier: Modifier) {
     }
 }
 
+/**
+ * 底部栏：四个等距图标 + 一个低频项收进「⋯」。
+ *
+ * 改造前这里是六个同款文字胶囊（A- A+ 目录 搜索 设置 ... 换文件），
+ * 没有主次也没有图标 —— 密集却没有信息量。现在：
+ *  - 图标 24dp、触摸区 48dp，四个按钮视觉重量一致
+ *  - 字号（低频）改成点「Aa」弹浮层，腾出两个按钮位
+ *  - 「换文件」收进「⋯」，主栏从 6 项降到 4 项
+ */
 @Composable
 private fun ReaderBottomBar(
-    fontSize: Float,
-    onFontChange: (Float) -> Unit,
+    fontPanelOpen: Boolean,
+    onToggleFontPanel: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenToc: () -> Unit,
     onOpenSearch: () -> Unit,
@@ -227,42 +281,152 @@ private fun ReaderBottomBar(
     bottomPadding: androidx.compose.ui.unit.Dp,
     modifier: Modifier
 ) {
-    Column(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
+    var moreOpen by remember { mutableStateOf(false) }
+
+    Column(modifier.fillMaxWidth()) {
+        // 发丝线：比改造前的 1dp outline(0.6f) 更淡，只做分隔不抢视线
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                .background(MaterialTheme.colorScheme.outlineVariant)
         )
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 10.dp + bottomPadding),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .padding(horizontal = Sp.s, vertical = Sp.xs)
+                .padding(bottom = bottomPadding),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            PillButton(text = "A-", onClick = { onFontChange(fontSize - ReaderPrefs.FONT_STEP) })
-            PillButton(text = "A+", onClick = { onFontChange(fontSize + ReaderPrefs.FONT_STEP) })
-            Spacer(Modifier.size(4.dp))
-            PillButton(text = "目录", onClick = onOpenToc)
-            PillButton(text = "搜索", onClick = onOpenSearch)
-            PillButton(text = "设置", onClick = onOpenSettings)
-            Spacer(Modifier.weight(1f))
-            PillButton(text = "换文件", onClick = onPickFile)
+            BarIcon(
+                label = "目录",
+                onClick = onOpenToc,
+                modifier = Modifier.weight(1f),
+                draw = { tint -> MiIcons.Toc(tint) }
+            )
+            BarIcon(
+                label = "搜索",
+                onClick = onOpenSearch,
+                modifier = Modifier.weight(1f),
+                draw = { tint -> MiIcons.Search(tint) }
+            )
+            BarIcon(
+                label = "字号",
+                onClick = onToggleFontPanel,
+                active = fontPanelOpen,
+                modifier = Modifier.weight(1f),
+                draw = { tint -> FontGlyph(tint) }
+            )
+            BarIcon(
+                label = "更多",
+                onClick = { moreOpen = true },
+                modifier = Modifier.weight(1f),
+                draw = { tint -> MiIcons.More(tint) }
+            )
+        }
+
+        // 「⋯」下拉：低频操作都放这儿，不再占用主栏
+        DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+            DropdownMenuItem(
+                text = { Text("换一个文件", fontSize = Type.bodyLarge) },
+
+                onClick = { moreOpen = false; onPickFile() }
+            )
+            DropdownMenuItem(
+                text = { Text("阅读设置", fontSize = Type.bodyLarge) },
+
+                onClick = { moreOpen = false; onOpenSettings() }
+            )
         }
     }
 }
 
+/** 底部栏图标按钮：图标 24dp，触摸区撑到 48dp 高，点击标题可无障碍朗读。 */
 @Composable
-private fun PillButton(text: String, onClick: () -> Unit) {
+private fun BarIcon(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    active: Boolean = false,
+    draw: @Composable (Color) -> Unit
+) {
+    val tint = if (active) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
-        Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+        modifier
+            .height(MinTouchTarget)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center
     ) {
-        Text(text = text, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+        draw(tint)
+    }
+}
+
+/** 字号图标用「Aa」字样，比画两个三角形更像约定的 UI 语言。 */
+@Composable
+private fun FontGlyph(tint: Color) {
+    Text(
+        text = MiIcons.FONT_LABEL,
+        fontSize = Type.bodyLarge,
+        fontWeight = FontWeight.Medium,
+        color = tint
+    )
+}
+
+/**
+ * 字号浮层。改造前是两个常驻按钮 A-/A+；
+ * 调字号是低频操作（一本书 1~2 次），不值得占两个主栏位置。
+ */
+@Composable
+private fun FontPanel(
+    fontSize: Float,
+    onFontChange: (Float) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Row(
+        Modifier
+            .padding(horizontal = Sp.l)
+            .fillMaxWidth()
+            .clip(Shapes.card)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(horizontal = Sp.m, vertical = Sp.s),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "A",
+            fontSize = Type.label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Slider(
+            value = fontSize,
+            onValueChange = onFontChange,
+            valueRange = ReaderPrefs.MIN_FONT..ReaderPrefs.MAX_FONT,
+            steps = (ReaderPrefs.MAX_FONT - ReaderPrefs.MIN_FONT).toInt() - 1,
+            modifier = Modifier.weight(1f).padding(horizontal = Sp.s)
+        )
+        Text(
+            text = "A",
+            fontSize = Type.title,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.width(Sp.s))
+        Text(
+            text = fontSize.toInt().toString(),
+            fontSize = Type.caption,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(18.dp)
+        )
+        Box(
+            Modifier
+                .size(32.dp)
+                .clip(Shapes.pill)
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            MiIcons.Close(MaterialTheme.colorScheme.onSurfaceVariant, 14.dp)
+        }
     }
 }
 

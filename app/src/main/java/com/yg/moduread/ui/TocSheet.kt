@@ -50,14 +50,14 @@ fun TocSheet(
             ) {
                 Text(
                     text = "目录",
-                    fontSize = 16.sp,
+                    fontSize = Type.title,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = entries.size.toString() + " 个标题",
-                    fontSize = 12.sp,
+                    fontSize = Type.caption,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -82,7 +82,7 @@ private fun TocRow(entry: TocEntry, active: Boolean, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 1.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(Shapes.chip)
             .background(
                 if (active) MaterialTheme.colorScheme.surfaceVariant
                 else MaterialTheme.colorScheme.surface
@@ -108,9 +108,9 @@ private fun TocRow(entry: TocEntry, active: Boolean, onClick: () -> Unit) {
         Text(
             text = entry.text,
             fontSize = when (entry.level) {
-                1 -> 15.sp
-                2 -> 14.sp
-                else -> 13.sp
+                1 -> (Type.bodyLarge.value + 1f).sp
+                2 -> Type.bodyLarge
+                else -> Type.body
             },
             fontWeight = if (entry.level <= 2) FontWeight.Medium else FontWeight.Normal,
             color = if (active) MaterialTheme.colorScheme.primary
