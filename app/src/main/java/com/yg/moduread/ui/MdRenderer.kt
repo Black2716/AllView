@@ -6,10 +6,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -117,30 +119,65 @@ private fun HeadingView(
     modifier: Modifier,
     onAnchor: (String) -> Unit
 ) {
-    val scale = when (block.level) {
-        1 -> 1.72f
-        2 -> 1.42f
-        3 -> 1.20f
-        4 -> 1.06f
-        5 -> 0.98f
-        else -> 0.92f
+    // 层级靠「字号 + 行高 + 字重 + 段前距」四件套区分，
+    // 而不是只缩字号 —— 改造前 H2 与 H3 只差 0.22 倍，视觉上分不开。
+    val spec = when (block.level) {
+        1 -> HeadingSpec(1.75f, 1.25f, FontWeight.Bold, 28.dp, 12.dp)
+        2 -> HeadingSpec(1.40f, 1.30f, FontWeight.SemiBold, 24.dp, 10.dp)
+        3 -> HeadingSpec(1.18f, 1.35f, FontWeight.SemiBold, 18.dp, 8.dp)
+        4 -> HeadingSpec(1.05f, 1.40f, FontWeight.Medium, 14.dp, 6.dp)
+        else -> HeadingSpec(1.00f, 1.45f, FontWeight.Medium, 12.dp, 4.dp)
     }
-    val topPad = when (block.level) {
-        1 -> 24.dp
-        2 -> 18.dp
-        else -> 12.dp
-    }
-    MdText(
-        text = buildInline(block.content),
-        fontSize = (baseFontSize * scale).sp,
-        lineHeight = (baseFontSize * scale * 1.32f).sp,
-        fontWeight = FontWeight.Bold,
-        modifier = modifier
+    val secondary = block.level >= 5
+
+    Column(
+        modifier
             .fillMaxWidth()
-            .padding(top = topPad, bottom = baseFontSize.dp * 0.45f),
-        onAnchor = onAnchor
-    )
+            .padding(top = spec.topPad, bottom = spec.bottomPad)
+    ) {
+        MdText(
+            text = buildInline(block.content),
+            fontSize = (baseFontSize * spec.scale).sp,
+            lineHeight = (baseFontSize * spec.scale * spec.lineHeightScale).sp,
+            fontWeight = spec.weight,
+            color = if (secondary) MaterialTheme.colorScheme.onSurfaceVariant
+            else MaterialTheme.colorScheme.onBackground,
+            onAnchor = onAnchor
+        )
+        // H1 用强调色短横收尾；H2 用通栏发丝线，把大节和亲子节分开
+        when (block.level) {
+            1 -> {
+                Spacer(Modifier.height(Sp.m))
+                Box(
+                    Modifier
+                        .width(40.dp)
+                        .height(3.dp)
+                        .clip(Shapes.chip)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
+            }
+
+            2 -> {
+                Spacer(Modifier.height(Sp.s))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
+            }
+        }
+    }
 }
+
+/** 标题排版参数：字号倍率、行高倍率、字重、段前、段后。 */
+private data class HeadingSpec(
+    val scale: Float,
+    val lineHeightScale: Float,
+    val weight: FontWeight,
+    val topPad: androidx.compose.ui.unit.Dp,
+    val bottomPad: androidx.compose.ui.unit.Dp
+)
 
 @Composable
 private fun QuoteView(
@@ -158,12 +195,12 @@ private fun QuoteView(
     ) {
         Box(
             Modifier
-                .width(3.dp)
+                .width(4.dp)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(2.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+                .clip(Shapes.chip)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f))
         )
-        Column(Modifier.padding(start = 12.dp).fillMaxWidth()) {
+        Column(Modifier.padding(start = Sp.l).fillMaxWidth()) {
             block.children.forEach { child ->
                 MdBlockView(
                     block = child,
@@ -237,18 +274,27 @@ private fun CodeView(block: MdBlock.CodeBlock, baseFontSize: Float, modifier: Mo
     Column(
         modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(vertical = Sp.s)
+            .clip(Shapes.card)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .padding(horizontal = 14.dp, vertical = Sp.m)
     ) {
+        // 语言标签从「独占一行」改成右上角小胶囊，省一行高度
         block.language?.let { lang ->
-            Text(
-                text = lang,
-                fontSize = (baseFontSize * 0.72f).sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.padding(bottom = 6.dp)
-            )
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = Sp.s),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Text(
+                    text = lang,
+                    fontSize = Type.label,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .clip(Shapes.chip)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                )
+            }
         }
         SelectionContainer {
             val colors = syntaxColors()
@@ -279,7 +325,7 @@ private fun TableView(block: MdBlock.Table, baseFontSize: Float, modifier: Modif
             .fillMaxWidth()
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .then(if (fits) Modifier else Modifier.horizontalScroll(rememberScrollState()))
     ) {
         TableRowView(block.head, columns, cellFont, fits, weights, header = true)
@@ -288,7 +334,7 @@ private fun TableView(block: MdBlock.Table, baseFontSize: Float, modifier: Modif
                 Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
             )
             TableRowView(row, columns, cellFont, fits, weights, header = false)
         }
@@ -335,7 +381,7 @@ private fun TableRowView(
     Row(
         Modifier
             .fillMaxWidth()
-            .then(if (header) Modifier.background(MaterialTheme.colorScheme.surfaceVariant) else Modifier)
+            .then(if (header) Modifier.background(MaterialTheme.colorScheme.surfaceContainer) else Modifier)
             .padding(vertical = 9.dp)
     ) {
         for (c in 0 until columns) {
@@ -379,7 +425,7 @@ private fun ImageView(block: MdBlock.Image, modifier: Modifier, docUri: String?)
                 bitmap = image,
                 contentDescription = block.alt,
                 contentScale = ContentScale.FillWidth,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                modifier = Modifier.fillMaxWidth().clip(Shapes.card)
             )
         } else {
             Text(
@@ -396,9 +442,10 @@ private fun ImageView(block: MdBlock.Image, modifier: Modifier, docUri: String?)
         if (block.alt.isNotBlank()) {
             Text(
                 text = block.alt,
-                fontSize = 12.sp,
+                fontSize = Type.label,
+                textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                modifier = Modifier.fillMaxWidth().padding(top = Sp.s)
             )
         }
     }
@@ -416,6 +463,7 @@ private fun MdText(
     modifier: Modifier = Modifier,
     fontWeight: FontWeight = FontWeight.Normal,
     textAlign: TextAlign = TextAlign.Start,
+    color: Color? = null,
     onAnchor: (String) -> Unit = {}
 ) {
     val uriHandler = LocalUriHandler.current
@@ -426,7 +474,7 @@ private fun MdText(
         lineHeight = lineHeight,
         fontWeight = fontWeight,
         textAlign = textAlign,
-        color = MaterialTheme.colorScheme.onBackground,
+        color = color ?: MaterialTheme.colorScheme.onBackground,
         onTextLayout = { layout = it },
         modifier = modifier.pointerInput(text) {
             detectTapGestures { position ->

@@ -132,6 +132,13 @@ fun ReaderScreen(
             .fillMaxSize()
             .padding(top = insets.calculateTopPadding())
     ) {
+        // 空态 → 文档的切换用透明度过渡，避免 Crossfade（animation 模块）
+        val contentAlpha by animateFloatAsState(
+            targetValue = if (doc.blocks.isEmpty()) 0f else 1f,
+            animationSpec = tween(200),
+            label = "contentAlpha"
+        )
+
         when {
             doc.loading && doc.blocks.isEmpty() -> LoadingView()
             doc.blocks.isEmpty() -> EmptyView(
@@ -144,7 +151,9 @@ fun ReaderScreen(
             else -> {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = contentAlpha },
                     contentPadding = PaddingValues(
                         start = 20.dp,
                         end = 20.dp,
@@ -169,10 +178,19 @@ fun ReaderScreen(
                     }
                 }
 
-                if (showBar) {
+                // 顶栏淡入淡出：用 animateFloatAsState 而不是 AnimatedVisibility，
+                // 后者会把 androidx.compose.animation 整包拖进 dex
+                val topBarAlpha by animateFloatAsState(
+                    targetValue = if (showBar) 1f else 0f,
+                    animationSpec = tween(150),
+                    label = "topBarAlpha"
+                )
+                if (topBarAlpha > 0.01f) {
                     TopBar(
                         title = body.displayTitle(doc.title),
-                        modifier = Modifier.align(Alignment.TopCenter)
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .graphicsLayer { alpha = topBarAlpha }
                     )
                 }
                 ReaderBottomBar(
