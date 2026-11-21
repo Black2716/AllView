@@ -491,7 +491,7 @@ git add sample/pic.png
 
 ## 9. 本仓库特有注意事项（必读）
 
-### 9.1 `.git/config` 里的三行网络配置 —— 不要删、不要提交
+### 9.1 `.git/config` 里的三行网络配置 —— 别删它（它本来就不会被提交）
 
 本机 `.git/config` 里有这样一段（是本机绕过 DNS 污染的设置）：
 
@@ -513,14 +513,24 @@ git add sample/pic.png
 **这个 IP 失效时怎么办**（症状：又出现第 3.2 节 B 的 21 秒超时）：
 
 ```bash
-# 1) 查 github.com 当前可用 IP（多试几次，挑能通的）
-ping github.com
-# 2) 换掉固定 IP
-git config --local http.curloptResolve github.com:443:<新IP>
-# 3) 或者临时摘掉这行，让系统 DNS 自己解析
+# 1) 看当前固定的 IP 还是不是原来那个
+git config --local --get http.curloptResolve
+
+# 2) 逐条试探候选 IP（把能返回 200 的那个记下来）
+for ip in 20.205.243.166 140.82.113.3 20.27.177.113; do
+  printf '%s -> ' "$ip"
+  curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 --resolve github.com:443:$ip https://github.com/
+done
+
+# 3) 换成能通的那个
+git config --local http.curloptResolve github.com:443:<能通的IP>
+
+# 4) 或者干脆摘掉这行，让系统 DNS 自己解析（DNS 干净时更省事）
 git config --local --unset http.curloptResolve
 git push
 ```
+
+> 判据就看 `git push` 能不能过：`Failed to connect ... after 21000 ms` 说明 IP 不通，换一个；`could not read Username` 说明网络已通、缺的是凭据（见 9.3）。
 
 **只对哪个仓库生效**：`--local` 只作用于本仓库；如果你想全局（所有仓库），改用 `git config --global http.curloptResolve ...`。
 
