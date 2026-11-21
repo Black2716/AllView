@@ -23,6 +23,8 @@ fun ReaderRoot(vm: ReaderViewModel) {
     val doc by vm.doc.collectAsStateWithLifecycle()
     val prefs by vm.readerPrefs.collectAsStateWithLifecycle()
     val settingsVisible by vm.showSettings.collectAsStateWithLifecycle()
+    var tocVisible by remember { mutableStateOf(false) }
+    val currentIndex = remember(doc.docUri) { mutableStateOf(0) }
 
     val context = LocalContext.current
     val imagePermission = if (android.os.Build.VERSION.SDK_INT >= 33) {
@@ -68,8 +70,33 @@ fun ReaderRoot(vm: ReaderViewModel) {
                 prefs = prefs,
                 onPickFile = openPicker,
                 onFontChange = vm::setFontSize,
-                onOpenSettings = { vm.setSettingsVisible(true) }
+                onOpenSettings = { vm.setSettingsVisible(true) },
+                onSaveProgress = { index, offset ->
+                    vm.saveProgress(index, offset)
+                    currentIndex.value = index
+                },
+                onOpenToc = { tocVisible = true },
+                // 文档内锚点：#slug -> 块索引 -> 跳转
+                onAnchor = { url ->
+                    // body = blocks.drop(1) 且列表 0 号是页首标题项，
+                    // 两级偏移正好抵消：列表 item 下标 == 块下标
+                    vm.resolveAnchor(url)?.let(vm::requestJump)
+                },
+                jumpTarget = vm.jumpTo.collectAsStateWithLifecycle().value,
+                onJumpConsumed = vm::consumeJump
             )
+
+            if (tocVisible) {
+                TocSheet(
+                    entries = doc.toc,
+                    currentIndex = currentIndex.value,
+                    onSelect = { blockIndex ->
+                        tocVisible = false
+                        vm.requestJump(blockIndex)
+                    },
+                    onDismiss = { tocVisible = false }
+                )
+            }
 
             if (settingsVisible) {
                 SettingsSheet(
@@ -81,6 +108,27 @@ fun ReaderRoot(vm: ReaderViewModel) {
             }
         }
     }
+}
+
+/**
+ * LazyColumn 的稳定 key 提示：类型 + 正文前 24 字。
+ * 只用于 key，不做任何展示；同一位置内容变了 key 才变，滚动时不会误重组。
+ */
+fun MdBlock.keyHint(): String = when (this) {
+    is MdBlock.Heading -> "h" + level + ":" + content.plainText().take(24)
+    is MdBlock.Para -> "p:" + content.plainText().take(24)
+    is MdBlock.CodeBlock -> "c:" + code.take(24)
+    is MdBlock.Math -> "m:" + latex.take(24)
+    is MdBlock.Image -> "i:" + url.take(24)
+    is MdBlock.Table -> "t:" + (head.firstOrNull()?.inlines?.plainText()?.take(16) ?: "")
+    is MdBlock.Quote -> "q"
+    is MdBlock.ListBlock -> "l:" + (items.firstOrNull()?.firstOrNull()?.let { b ->
+        when (b) {
+            is MdBlock.Para -> b.content.plainText().take(16)
+            else -> ""
+        }
+    } ?: "")
+    is MdBlock.Rule -> "r"
 }
 
 /** 小工具：标题文本（首个一级标题优先，其次文件名）。 */

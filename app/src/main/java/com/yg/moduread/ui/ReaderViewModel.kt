@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yg.moduread.data.DocRepository
+import com.yg.moduread.md.MdToc
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,24 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     private val _showSettings = MutableStateFlow(false)
     val showSettings: StateFlow<Boolean> = _showSettings.asStateFlow()
 
+    /** 一次性跳转请求：目录点击、锚点点击都往这里塞目标块索引。 */
+    private val _jumpTo = MutableStateFlow<Int?>(null)
+    val jumpTo: StateFlow<Int?> = _jumpTo.asStateFlow()
+
+    fun requestJump(blockIndex: Int) {
+        _jumpTo.value = blockIndex.coerceAtLeast(0)
+    }
+
+    fun consumeJump() {
+        _jumpTo.value = null
+    }
+
+    /** 文档内锚点 -> 块索引；找不到返回 null。 */
+    fun resolveAnchor(url: String): Int? {
+        val slug = MdToc.anchorOf(url) ?: return null
+        return _doc.value.anchors[slug]
+    }
+
     private var restoreStarted = false
 
     /**
@@ -56,12 +75,19 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             runCatching {
                 DocRepository.load(getApplication(), uri)
             }.onSuccess { loaded ->
+                val saved = readProgress(uri)
+                // 目录与锚点表在这里一次算好，界面只管用，不在重组时装算
+                val toc = MdToc.build(loaded.blocks)
                 _doc.value = DocumentState(
                     title = loaded.title,
                     blocks = loaded.blocks,
                     charCount = loaded.charCount,
                     baseDir = loaded.baseDir,
                     docUri = loaded.docUri,
+                    restoreIndex = saved.first,
+                    restoreOffset = saved.second,
+                    toc = toc,
+                    anchors = MdToc.index(toc),
                     loading = false
                 )
                 prefs.edit().putString(KEY_LAST_URI, uri.toString()).apply()
@@ -72,6 +98,29 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    /**
+     * 记录阅读位置。按文档 uri 分开存，换书各自记住各自的位置。
+     * 只写 SharedPreferences 的两个整数，不建数据库、不占包体。
+     */
+    fun saveProgress(index: Int, offset: Int) {
+        val uri = _doc.value.docUri ?: return
+        val key = progressKey(uri)
+        prefs.edit()
+            .putInt(KEY_PROGRESS_INDEX + key, index)
+            .putInt(KEY_PROGRESS_OFFSET + key, offset)
+            .apply()
+    }
+
+    private fun readProgress(uri: Uri): Pair<Int, Int> {
+        val key = progressKey(uri.toString())
+        val index = prefs.getInt(KEY_PROGRESS_INDEX + key, 0)
+        val offset = prefs.getInt(KEY_PROGRESS_OFFSET + key, 0)
+        return index.coerceAtLeast(0) to offset.coerceAtLeast(0)
+    }
+
+    /** uri 可能很长，用 hashCode 做键；碰撞概率对「记住几本书的位置」这个用途无影响。 */
+    private fun progressKey(uri: String): String = uri.hashCode().toString()
 
     fun clearDocument() {
         _doc.value = DocumentState()
@@ -97,5 +146,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_FONT = "font_size"
         const val KEY_THEME = "theme_mode"
         const val KEY_LAST_URI = "last_uri"
+        const val KEY_PROGRESS_INDEX = "progress_index_"
+        const val KEY_PROGRESS_OFFSET = "progress_offset_"
     }
 }

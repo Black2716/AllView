@@ -64,21 +64,24 @@ fun MdBlockView(
     baseFontSize: Float,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
-    docUri: String? = null
+    docUri: String? = null,
+    /** 文档内锚点（#slug）：交给上层解析成块索引并滚动，返回 true 表示已消费。 */
+    onAnchor: (String) -> Unit = {}
 ) {
     when (block) {
-        is MdBlock.Heading -> HeadingView(block, baseFontSize, modifier)
+        is MdBlock.Heading -> HeadingView(block, baseFontSize, modifier, onAnchor)
         is MdBlock.Para -> MdText(
             text = buildInline(block.content),
             fontSize = baseFontSize.sp,
             lineHeight = (baseFontSize * LINE_HEIGHT_RATIO).sp,
             modifier = modifier
                 .fillMaxWidth()
-                .padding(bottom = if (compact) 2.dp else baseFontSize.dp * 0.7f)
+                .padding(bottom = if (compact) 2.dp else baseFontSize.dp * 0.7f),
+            onAnchor = onAnchor
         )
 
-        is MdBlock.Quote -> QuoteView(block, baseFontSize, modifier, docUri)
-        is MdBlock.ListBlock -> ListView(block, baseFontSize, modifier, docUri)
+        is MdBlock.Quote -> QuoteView(block, baseFontSize, modifier, docUri, onAnchor)
+        is MdBlock.ListBlock -> ListView(block, baseFontSize, modifier, docUri, onAnchor)
         is MdBlock.CodeBlock -> CodeView(block, baseFontSize, modifier)
         is MdBlock.Table -> TableView(block, baseFontSize, modifier)
         is MdBlock.Math -> MathView(
@@ -105,7 +108,12 @@ private fun RuleLine(modifier: Modifier) {
 }
 
 @Composable
-private fun HeadingView(block: MdBlock.Heading, baseFontSize: Float, modifier: Modifier) {
+private fun HeadingView(
+    block: MdBlock.Heading,
+    baseFontSize: Float,
+    modifier: Modifier,
+    onAnchor: (String) -> Unit
+) {
     val scale = when (block.level) {
         1 -> 1.72f
         2 -> 1.42f
@@ -126,7 +134,8 @@ private fun HeadingView(block: MdBlock.Heading, baseFontSize: Float, modifier: M
         fontWeight = FontWeight.Bold,
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = topPad, bottom = baseFontSize.dp * 0.45f)
+            .padding(top = topPad, bottom = baseFontSize.dp * 0.45f),
+        onAnchor = onAnchor
     )
 }
 
@@ -135,7 +144,8 @@ private fun QuoteView(
     block: MdBlock.Quote,
     baseFontSize: Float,
     modifier: Modifier,
-    docUri: String?
+    docUri: String?,
+    onAnchor: (String) -> Unit
 ) {
     Row(
         modifier
@@ -152,7 +162,13 @@ private fun QuoteView(
         )
         Column(Modifier.padding(start = 12.dp).fillMaxWidth()) {
             block.children.forEach { child ->
-                MdBlockView(child, baseFontSize * 0.97f, compact = true, docUri = docUri)
+                MdBlockView(
+                    block = child,
+                    baseFontSize = baseFontSize * 0.97f,
+                    compact = true,
+                    docUri = docUri,
+                    onAnchor = onAnchor
+                )
             }
         }
     }
@@ -163,7 +179,8 @@ private fun ListView(
     block: MdBlock.ListBlock,
     baseFontSize: Float,
     modifier: Modifier,
-    docUri: String?
+    docUri: String?,
+    onAnchor: (String) -> Unit
 ) {
     Column(modifier.fillMaxWidth().padding(bottom = baseFontSize.dp * 0.4f)) {
         block.items.forEachIndexed { index, item ->
@@ -177,7 +194,13 @@ private fun ListView(
                 )
                 Column(Modifier.fillMaxWidth().padding(start = 6.dp)) {
                     item.forEach { child ->
-                        MdBlockView(child, baseFontSize, compact = true, docUri = docUri)
+                        MdBlockView(
+                            block = child,
+                            baseFontSize = baseFontSize,
+                            compact = true,
+                            docUri = docUri,
+                            onAnchor = onAnchor
+                        )
                     }
                 }
             }
@@ -367,7 +390,8 @@ private fun MdText(
     lineHeight: TextUnit,
     modifier: Modifier = Modifier,
     fontWeight: FontWeight = FontWeight.Normal,
-    textAlign: TextAlign = TextAlign.Start
+    textAlign: TextAlign = TextAlign.Start,
+    onAnchor: (String) -> Unit = {}
 ) {
     val uriHandler = LocalUriHandler.current
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -386,8 +410,11 @@ private fun MdText(
                 text.getStringAnnotations("URL", offset, offset)
                     .firstOrNull()
                     ?.let { annotation ->
-                        // 页内锚点（#标题）没有外部处理器，点击时保持静默
-                        if (!annotation.item.startsWith("#")) {
+                        // 页内锚点（#slug）交给上层解析成块索引并滚动；
+                        // 外部链接仍然交系统浏览器
+                        if (annotation.item.startsWith("#")) {
+                            onAnchor(annotation.item)
+                        } else {
                             runCatching { uriHandler.openUri(annotation.item) }
                         }
                     }

@@ -26,7 +26,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -39,13 +45,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.yg.moduread.md.MdBlock
 
+@OptIn(FlowPreview::class)
 @Composable
 fun ReaderScreen(
     doc: DocumentState,
     prefs: ReaderPrefs,
     onPickFile: () -> Unit,
     onFontChange: (Float) -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onSaveProgress: (Int, Int) -> Unit = { _, _ -> },
+    onOpenToc: () -> Unit = {},
+    onAnchor: (String) -> Unit = {},
+    /** 一次性跳转目标（列表 item 下标）。消费后必须调 onJumpConsumed 清空。 */
+    jumpTarget: Int? = null,
+    onJumpConsumed: () -> Unit = {}
 ) {
     val bottomInsets = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
     val listState = rememberLazyListState()
@@ -57,13 +70,40 @@ fun ReaderScreen(
             else -> doc.blocks
         }
     }
-    // 长文档分组：40 个块一组，LazyColumn 只为可见组创建布局节点
-    val chunks = remember(body) { body.chunked(40) }
     // 滚动后顶部栏淡入，停在顶部时隐藏，把版面还给文字
     val showBar by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 220
         }
+    }
+
+    // 文档换了（或首次解析完成）就恢复上次位置，每份文档只消费一次
+    var restoredFor by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(doc.docUri, body.size) {
+        val uri = doc.docUri ?: return@LaunchedEffect
+        if (body.isEmpty() || restoredFor == uri) return@LaunchedEffect
+        restoredFor = uri
+        // +1：0 号位置是页首标题项
+        val target = doc.restoreIndex.coerceIn(0, body.size)
+        if (target > 0 || doc.restoreOffset > 0) {
+            listState.scrollToItem(target, doc.restoreOffset)
+        }
+    }
+
+    // 目录/锚点跳转：滚到目标后回报已消费，避免重复触发
+    LaunchedEffect(jumpTarget, body.size) {
+        val target = jumpTarget ?: return@LaunchedEffect
+        if (body.isEmpty()) return@LaunchedEffect
+        val clamped = target.coerceIn(0, body.size)
+        listState.animateScrollToItem(clamped)
+        onJumpConsumed()
+    }
+
+    // 位置变化后节流 1 秒落盘，避免每帧都写 SharedPreferences
+    LaunchedEffect(listState, doc.docUri) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .debounce(1000)
+            .collect { (index, offset) -> onSaveProgress(index, offset) }
     }
 
     Box(
@@ -88,13 +128,16 @@ fun ReaderScreen(
                     item(key = "title") {
                         DocTitle(doc = doc, fontSize = prefs.fontSizeSp)
                     }
-                    itemsIndexed(chunks) { _, chunk ->
-                        Column(Modifier.fillMaxWidth()) {
-                            chunk.forEach { block ->
-                                SelectionContainer(Modifier.fillMaxWidth()) {
-                                    MdBlockView(block, prefs.fontSizeSp, docUri = doc.docUri)
-                                }
-                            }
+                    // 一块一项：索引即块索引，目录/搜索/书签都能直接定位。
+                    // key 用「序号 + 类型 + 正文前 24 字」，跨重组稳定，滚动不抖。
+                    itemsIndexed(body, key = { i, block -> i.toString() + ':' + block.keyHint() }) { _, block ->
+                        SelectionContainer(Modifier.fillMaxWidth()) {
+                            MdBlockView(
+                                block = block,
+                                baseFontSize = prefs.fontSizeSp,
+                                docUri = doc.docUri,
+                                onAnchor = onAnchor
+                            )
                         }
                     }
                 }
@@ -109,6 +152,7 @@ fun ReaderScreen(
                     fontSize = prefs.fontSizeSp,
                     onFontChange = onFontChange,
                     onOpenSettings = onOpenSettings,
+                    onOpenToc = onOpenToc,
                     onPickFile = onPickFile,
                     bottomPadding = bottomInsets,
                     modifier = Modifier.align(Alignment.BottomCenter)
@@ -165,6 +209,7 @@ private fun ReaderBottomBar(
     fontSize: Float,
     onFontChange: (Float) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenToc: () -> Unit,
     onPickFile: () -> Unit,
     bottomPadding: androidx.compose.ui.unit.Dp,
     modifier: Modifier
@@ -186,6 +231,7 @@ private fun ReaderBottomBar(
             PillButton(text = "A-", onClick = { onFontChange(fontSize - ReaderPrefs.FONT_STEP) })
             PillButton(text = "A+", onClick = { onFontChange(fontSize + ReaderPrefs.FONT_STEP) })
             Spacer(Modifier.size(4.dp))
+            PillButton(text = "目录", onClick = onOpenToc)
             PillButton(text = "设置", onClick = onOpenSettings)
             Spacer(Modifier.weight(1f))
             PillButton(text = "换文件", onClick = onPickFile)

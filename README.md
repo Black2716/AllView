@@ -15,6 +15,8 @@
 | debug APK 实测体积 | 7.8 MB（不裁剪，仅用于调试） |
 | 冷启动（Pixel 后端 API 34 模拟器，host GPU） | **302–505 ms**（`Displayed` 打点） |
 | 9.2 万字文档打开到首屏可读 | 约 3.4 s（含 `uiautomator` 轮询开销） |
+| 单测 | **24/24**（9 解析 + 8 公式 + 7 目录） |
+| 单测 | **24/24**（9 解析 + 8 公式 + 7 目录） |
 
 ## 一、界面截图
 
@@ -74,7 +76,8 @@ ModuReader/
         │       ├── MainActivity.kt             # 单 Activity，无导航框架
         │       ├── md/
         │       │   ├── MdModel.kt              # 只读 AST：MdBlock / MdInline
-        │       │   └── MdParser.kt             # commonmark -> AST 一次性转换
+        │       │   ├── MdParser.kt             # commonmark -> AST 一次性转换
+        │       │   └── MdToc.kt                # 目录抽取 + GitHub slug
         │       ├── data/
         │       │   ├── DocRepository.kt        # SAF Uri -> UTF-8 -> AST
         │       │   └── MdImageResolver.kt      # 相对路径图片定位（本地）
@@ -85,6 +88,8 @@ ModuReader/
         │           ├── ReaderRoot.kt           # SAF 选择器 + 页面装配
         │           ├── ReaderScreen.kt         # LazyColumn 阅读主界面
         │           ├── MdRenderer.kt           # 块级渲染器（全部元素）
+        │           ├── TocSheet.kt             # 目录抽屉（ModalBottomSheet）
+│           ├── TocSheet.kt             # 目录抽屉
         │           └── SettingsSheet.kt        # 字号 / 外观面板
         └── test/java/com/yg/moduread/
             └── MdParserTest.kt                 # 9 个解析单测（含真实长文）
@@ -105,6 +110,12 @@ ModuReader/
 | 图片 | 支持 | 块级等比铺满 + 图注；解析相对路径 / `file://` / `content://` |
 | 行内代码 / 粗体 / 斜体 | 支持 | `AnnotatedString` 拼装 |
 | 分隔线 | 支持 | 1dp 细线 |
+| **目录抽屉** | 支持 | 按级别缩进，点击直接跳转；书稿 86 个标题 |
+| **文档内锚点** | 支持 | `[文本](#slug)` 按 GitHub slug 规则解析后跳转 |
+| **阅读进度记忆** | 支持 | 按文档分别记住滚动位置，杀进程重开回到原处 |
+| **目录抽屉** | 支持 | 按级别缩进，点击直接跳转；书稿 86 个标题 |
+| **文档内锚点** `[文本](#slug)` | 支持 | 按 GitHub slug 规则解析后跳转 |
+| **阅读进度记忆** | 支持 | 按文档分别记住滚动位置，杀进程重开回到原处 |
 | **块级公式** `$$…$$` | 支持 | 原生排版：分式（自适应分数线）、上下标、求和/求积/最值的上下限、定界符、根号、重音、箭头 |
 | **行内公式** `$…$` | 支持 | 能线性化的转 Unicode 融入正文（σ、μₜ、x²）；含分式等结构降级为等宽原文 |
 | HTML 块 / 行内 HTML | 部分 | 按纯文本显示（不执行 HTML，无 WebView） |
