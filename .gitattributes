@@ -1,0 +1,16 @@
+# 默认文本文件统一 LF，避免 Windows 克隆后 gradlew 因 CRLF 无法执行
+* text=auto eol=lf
+
+# Gradle wrapper 脚本必须是可执行的 LF 脚本 / 可执行 bat
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+*.sh text eol=lf
+*.bat text eol=crlf
+
+# 二进制资源不做任何换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.jar binary
+*.apk binary
