@@ -81,6 +81,13 @@ fun MdBlockView(
         is MdBlock.ListBlock -> ListView(block, baseFontSize, modifier, docUri)
         is MdBlock.CodeBlock -> CodeView(block, baseFontSize, modifier)
         is MdBlock.Table -> TableView(block, baseFontSize, modifier)
+        is MdBlock.Math -> MathView(
+            latex = block.latex,
+            baseFontSize = baseFontSize,
+            display = block.display,
+            modifier = modifier
+        )
+
         is MdBlock.Image -> ImageView(block, modifier, docUri)
         is MdBlock.Rule -> RuleLine(modifier)
     }
@@ -260,6 +267,7 @@ private fun plainTextOf(cell: MdTableCell): String = buildString {
                 is MdInline.Strong -> walk(it.children)
                 is MdInline.Link -> walk(it.children)
                 is MdInline.InlineImage -> append(it.alt)
+                is MdInline.InlineMath -> append(it.latex)
                 MdInline.Break -> append(' ')
             }
         }
@@ -432,6 +440,19 @@ private fun AnnotatedString.Builder.appendInlines(
             }
 
             is MdInline.InlineImage -> withStyle(SpanStyle(color = linkColor)) { append("[图片]") }
+
+            // 行内公式：能线性化的走 Unicode（σ、μₜ、x² 直接融入正文），
+            // 含分式等无法线性化的结构才退回等宽原文
+            is MdInline.InlineMath -> {
+                val plain = com.yg.moduread.md.LatexText.unicode(item.latex)
+                if (plain != null) {
+                    append(plain)
+                } else {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, color = codeColor)) {
+                        append(item.latex)
+                    }
+                }
+            }
 
             MdInline.Break -> append("\n")
         }

@@ -39,9 +39,52 @@ class MdParser {
         .extensions(listOf(TablesExtension.create()))
         .build()
 
-    fun parse(source: String): List<MdBlock> {
-        val doc = parser.parse(source)
-        return blocksOf(doc)
+    fun parse(source: String): List<MdBlock> = parseWithMath(source)
+
+    /**
+     * commonmark 不认识 $$ 公式块，会把它当成普通段落原样输出。
+     * 因此在交给解析器之前，先把源码按 $$ 切成「Markdown 段 / 公式段」交替的片段，
+     * Markdown 段正常解析，公式段直接成为 MdBlock.Math。
+     */
+    private fun parseWithMath(source: String): List<MdBlock> {
+        val out = ArrayList<MdBlock>()
+        for ((text, isMath) in splitMathBlocks(source)) {
+            if (isMath) {
+                out.add(MdBlock.Math(text.trim(), display = true))
+            } else {
+                if (text.isBlank()) continue
+                out.addAll(blocksOf(parser.parse(text)))
+            }
+        }
+        return out
+    }
+
+    /** 按 $$ 切分；偶数段是 Markdown，奇数段是公式内容。 */
+    private fun splitMathBlocks(source: String): List<Pair<String, Boolean>> {
+        val parts = ArrayList<Pair<String, Boolean>>()
+        var cursor = 0
+        while (true) {
+            val open = source.indexOf("$$", cursor)
+            if (open < 0) {
+                parts.add(source.substring(cursor) to false)
+                break
+            }
+            // 转义的 \$\$ 不算公式
+            if (open > 0 && source[open - 1] == '\\') {
+                parts.add(source.substring(cursor, open + 2) to false)
+                cursor = open + 2
+                continue
+            }
+            val close = source.indexOf("$$", open + 2)
+            if (close < 0) {
+                parts.add(source.substring(cursor) to false)
+                break
+            }
+            parts.add(source.substring(cursor, open) to false)
+            parts.add(source.substring(open + 2, close) to true)
+            cursor = close + 2
+        }
+        return parts
     }
 
     private fun blocksOf(parent: Node): List<MdBlock> {
@@ -156,7 +199,7 @@ class MdParser {
         var child = parent.firstChild
         while (child != null) {
             when (child) {
-                is Text -> out.add(MdInline.Text(child.literal))
+                is Text -> appendTextWithMath(child.literal, out)
                 is Code -> out.add(MdInline.Code(child.literal))
                 is Emphasis -> out.add(MdInline.Emph(inlinesOf(child)))
                 is StrongEmphasis -> out.add(MdInline.Strong(inlinesOf(child)))
@@ -168,6 +211,46 @@ class MdParser {
                 else -> appendInlines(child, out)
             }
             child = child.next
+        }
+    }
+
+    /**
+     * 段落里的 $...$ 行内公式。
+     * 只认「单个 $ + 非空内容 + 单个 $」，且要求等宽配对，避免把货币符号误判成公式。
+     */
+    private fun appendTextWithMath(literal: String, out: MutableList<MdInline>) {
+        if (!literal.contains('$')) {
+            out.add(MdInline.Text(literal))
+            return
+        }
+        var cursor = 0
+        while (cursor < literal.length) {
+            val open = literal.indexOf('$', cursor)
+            if (open < 0) {
+                out.add(MdInline.Text(literal.substring(cursor)))
+                break
+            }
+            if (open > cursor) out.add(MdInline.Text(literal.substring(cursor, open)))
+            // $$ 已在上层处理，这里遇到就原样保留
+            if (open + 1 < literal.length && literal[open + 1] == '$') {
+                out.add(MdInline.Text("$"))
+                cursor = open + 1
+                continue
+            }
+            var close = -1
+            var scan = open + 1
+            while (scan < literal.length) {
+                if (literal[scan] == '\\') { scan += 2; continue }
+                if (literal[scan] == '$') { close = scan; break }
+                scan++
+            }
+            if (close < 0 || close == open + 1) {
+                out.add(MdInline.Text(literal.substring(open, minOf(open + 1, literal.length))))
+                cursor = open + 1
+                continue
+            }
+            out.add(MdInline.InlineMath(literal.substring(open + 1, close)))
+            cursor = close + 1
         }
     }
 
@@ -187,6 +270,7 @@ private fun StringBuilder.appendPlain(items: List<MdInline>) {
             is MdInline.Strong -> appendPlain(item.children)
             is MdInline.Link -> appendPlain(item.children)
             is MdInline.InlineImage -> append(item.alt)
+            is MdInline.InlineMath -> append(item.latex)
             MdInline.Break -> append(' ')
         }
     }

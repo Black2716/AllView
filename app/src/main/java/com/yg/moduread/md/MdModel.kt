@@ -9,6 +9,9 @@ sealed interface MdInline {
     data class Link(val url: String, val children: List<MdInline>) : MdInline
     /** 行内图片（段落里混合出现时降级为占位标记，独占段落时按块级图片渲染）。 */
     data class InlineImage(val url: String, val alt: String) : MdInline
+
+    /** 行内公式 $...$。 */
+    data class InlineMath(val latex: String) : MdInline
     data object Break : MdInline
 }
 
@@ -30,6 +33,9 @@ sealed interface MdBlock {
 
     data class CodeBlock(val code: String, val language: String?) : MdBlock
     data class Table(val head: List<MdTableCell>, val rows: List<List<MdTableCell>>) : MdBlock
+    /** 块级公式：display=true 时独立成行居中，false 为行内公式。 */
+    data class Math(val latex: String, val display: Boolean) : MdBlock
+
     data class Image(val url: String, val alt: String) : MdBlock
     data object Rule : MdBlock
 }

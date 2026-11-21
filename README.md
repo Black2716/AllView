@@ -97,6 +97,8 @@ ModuReader/
 | 图片 | 支持 | 块级等比铺满 + 图注；解析相对路径 / `file://` / `content://` |
 | 行内代码 / 粗体 / 斜体 | 支持 | `AnnotatedString` 拼装 |
 | 分隔线 | 支持 | 1dp 细线 |
+| **块级公式** `$$…$$` | 支持 | 原生排版：分式（自适应分数线）、上下标、求和/求积/最值的上下限、定界符、根号、重音、箭头 |
+| **行内公式** `$…$` | 支持 | 能线性化的转 Unicode 融入正文（σ、μₜ、x²）；含分式等结构降级为等宽原文 |
 | HTML 块 / 行内 HTML | 部分 | 按纯文本显示（不执行 HTML，无 WebView） |
 | 任务列表 / 脚注 / 删除线 | 未启用 | 按普通文本渲染 |
 
@@ -156,9 +158,10 @@ adb push sample/pic.png   /sdcard/Download/
 | `androidx.lifecycle:lifecycle-{runtime,viewmodel}-compose:2.8.2` | 生命周期与状态收集 | 同上 |
 | `org.commonmark:commonmark:0.22.0` | Markdown 解析 | 约 82 KB（dex 内 org.commonmark 全部类） |
 | `org.commonmark:commonmark-ext-gfm-tables:0.22.0` | GFM 表格 | 合并在上述统计中 |
+| 自研 `Latex.kt` + `MathView.kt` | LaTeX 子集解析与排版 | 约 60 KB（无第三方公式库，不引入 KaTeX/MathJax/WebView） |
 | `junit:junit:4.13.2` | 单测（不打进包） | 0 |
 
-未引入：图片加载库（Coil/Glide，省 0.6–1.2 MB）、导航库、DI 框架、WebView、Splash 库。
+未引入：图片加载库（Coil/Glide，省 0.6–1.2 MB）、导航库、DI 框架、WebView、Splash 库、公式渲染库（KaTeX/MathJax 走 WebView 会让包体涨 2 MB+ 并引入 JS 引擎）。
 
 实测产物：
 
