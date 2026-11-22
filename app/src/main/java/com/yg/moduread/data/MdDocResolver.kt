@@ -75,7 +75,12 @@ object MdDocResolver {
             // 2) raw: 型 id 直接转绝对路径
             if (parent.startsWith("raw:")) {
                 val f = File(parent.removePrefix("raw:") + "/" + rel)
-                if (f.isFile) return Uri.fromFile(f)
+                if (f.isFile) {
+                    val uri = Uri.fromFile(f)
+                    // 关键：/sdcard 下的 file:// 在分区存储下应用读不到。
+                    // 不校验就返回，上层会拿到一个打不开的 uri 且不会触发 SAF 回退。
+                    if (canRead(context, uri)) return uri
+                }
             }
         }
 
@@ -86,7 +91,10 @@ object MdDocResolver {
             File("/sdcard/Download", rel),
             File("/sdcard/Download", rel.substringAfterLast('/'))
         )
-        candidates.firstOrNull { it.isFile }?.let { return Uri.fromFile(it) }
+        candidates.firstOrNull { it.isFile }?.let {
+            val uri = Uri.fromFile(it)
+            if (canRead(context, uri)) return uri
+        }
 
         // 4) 分区存储下 /sdcard 直读会被拒，改用 Downloads 提供方的 document 树查询
         downloadsUri(context, rel.substringAfterLast('/'))?.let { uri ->

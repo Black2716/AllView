@@ -100,10 +100,17 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      */
     var pendingExternalUri: Uri? = null
 
-    /** 持久化当前打开的所有文档 uri（顺序即标签顺序），重启后恢复多开。 */
+    /**
+     * 持久化当前打开的所有文档 uri（顺序即标签顺序）与活动标签，
+     * 重启后恢复到上次正在读的那一本，而不是永远回到第一个标签。
+     */
     private fun persistSessionUris() {
         val uris = _sessions.value.mapNotNull { it.doc.docUri }
-        prefs.edit().putString(KEY_SESSION_URIS, uris.joinToString("\n")).apply()
+        val active = activeSession()?.doc?.docUri
+        prefs.edit()
+            .putString(KEY_SESSION_URIS, uris.joinToString("\n"))
+            .putString(KEY_ACTIVE_URI, active)
+            .apply()
     }
 
     /**
@@ -125,9 +132,16 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         val saved = prefs.getString(KEY_SESSION_URIS, null)
         val uris = saved?.split("\n")?.filter { it.isNotBlank() }.orEmpty()
         if (uris.isNotEmpty()) {
-            uris.forEachIndexed { i, s ->
+            uris.forEach { s ->
                 runCatching { Uri.parse(s) }.getOrNull()?.let { open(it, silent = true, newTab = true) }
-                if (i == 0) _activeId.value = _sessions.value.firstOrNull()?.id
+            }
+            // 回到上次活动的那一本；找不到（文件被删）就留在最后一个成功的标签
+            val wantActive = prefs.getString(KEY_ACTIVE_URI, null)
+            val active = _sessions.value.firstOrNull { it.doc.docUri == wantActive }
+            if (active != null) {
+                switchTo(active.id)
+            } else {
+                _activeId.value = _sessions.value.lastOrNull()?.id
             }
             return
         }
@@ -266,9 +280,10 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     fun switchTo(id: Long) {
         if (_sessions.value.none { it.id == id }) return
         _activeId.value = id
-        _bookmarks.value = bookmarkStore.list(
-            _sessions.value.first { it.id == id }.doc.docUri.orEmpty()
-        )
+        val uri = _sessions.value.first { it.id == id }.doc.docUri.orEmpty()
+        _bookmarks.value = bookmarkStore.list(uri)
+        // 记住上次停在哪一本，重启后回到它
+        prefs.edit().putString(KEY_ACTIVE_URI, uri).apply()
     }
 
     /** 关闭一个会话。关掉活动会话时自动切到相邻的一个。 */
@@ -365,6 +380,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_READING_THEME = "reading_theme"
         const val KEY_LAST_URI = "last_uri"
         const val KEY_SESSION_URIS = "session_uris"
+        const val KEY_ACTIVE_URI = "active_uri"
         const val KEY_PROGRESS_INDEX = "progress_index_"
         const val KEY_PROGRESS_OFFSET = "progress_offset_"
     }

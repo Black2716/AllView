@@ -60,7 +60,10 @@ fun ReaderRoot(vm: ReaderViewModel) {
 
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? -> if (uri != null) vm.open(uri) }
+    ) { uri: Uri? ->
+        if (uri != null) vm.open(uri)
+        pendingDocLink.value = null
+    }
 
     // 图片权限按需申请：只有文档里真的引用了本地图片才打扰用户
     val hasImages = remember(doc.blocks) { doc.blocks.any { it is MdBlock.Image } }
