@@ -126,7 +126,55 @@ class MdParser {
             child = child.next
         }
         val start = if (node is OrderedList) node.markerStartNumber ?: 1 else 1
-        return MdBlock.ListBlock(ordered, start, node.isTight, items)
+
+        // 任务列表：项的首段以 [ ] / [x] / [X] 开头时剥掉该前缀并记下勾选态。
+        // 剥掉而不是留着，是因为渲染层用 checkbox 代替项目符号，
+        // 留着会让正文里多出一段 "[ ] " 的字面量。
+        val states = ArrayList<Boolean?>(items.size)
+        val normalized = items.map { blocks ->
+            val task = blocks.firstOrNull()?.let { takeTaskMarker(it) }
+            if (task == null) {
+                states.add(null)
+                blocks
+            } else {
+                states.add(task.checked)
+                if (task.remaining.isEmpty()) blocks.drop(1)
+                else listOf(MdBlock.Para(task.remaining)) + blocks.drop(1)
+            }
+        }
+
+        return MdBlock.ListBlock(
+            ordered = ordered,
+            start = start,
+            tight = node.isTight,
+            items = normalized,
+            taskStates = if (states.all { it == null }) emptyList() else states
+        )
+    }
+
+    private class TaskMarker(val checked: Boolean, val remaining: List<MdInline>)
+
+    /**
+     * 若首段以 "[ ]" / "[x]" / "[X]" 开头，返回勾选态与剥掉前缀后的行内内容。
+     *
+     * 只在首段第一个文本节点上判断，且要求方括号后紧跟空白或段落结束 ——
+     * 这样 "[x]yz" 这类普通方括号文本不会被误判成任务项。
+     */
+    private fun takeTaskMarker(first: MdBlock): TaskMarker? {
+        if (first !is MdBlock.Para) return null
+        val head = first.content.firstOrNull() as? MdInline.Text ?: return null
+        val text = head.text
+        if (!text.startsWith("[")) return null
+        if (text.length < 3 || text[2] != ']') return null
+        val mark = text[1]
+        if (mark != ' ' && mark != 'x' && mark != 'X') return null
+        if (text.length > 3 && !text[3].isWhitespace()) return null
+
+        val rest = text.substring(minOf(4, text.length)).trimStart()
+        val remaining = ArrayList<MdInline>(first.content.size)
+        if (rest.isNotEmpty()) remaining.add(MdInline.Text(rest))
+        remaining.addAll(first.content.drop(1))
+        return TaskMarker(checked = mark != ' ', remaining = remaining)
     }
 
     private fun tableOf(node: Node): MdBlock.Table {

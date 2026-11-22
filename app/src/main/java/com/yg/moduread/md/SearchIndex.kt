@@ -112,3 +112,11 @@ fun MdBlock.searchableText(): String = when (this) {
     is MdBlock.Image -> alt
     is MdBlock.Rule -> ""
 }
+/**
+ * 书签摘要：取块纯文本前 40 字并压平空白。
+ * 用途是「文档改版后校验锚点是否还指对地方」，不是展示全文。
+ */
+fun MdBlock.bookmarkExcerpt(): String =
+    searchableText().replace(WHITESPACE, " ").trim().take(40)
+
+private val WHITESPACE = Regex("\\s+")

@@ -14,17 +14,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -47,12 +53,20 @@ fun TocSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val listState = rememberLazyListState()
+    var query by remember { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+
+    // 过滤只作用于展示，不改 entries 本身 —— 高亮仍按原始下标计算
+    val shown = remember(entries, query) {
+        val q = query.trim()
+        if (q.isEmpty()) entries else entries.filter { it.text.contains(q, ignoreCase = true) }
+    }
 
     // 打开抽屉时把当前章节滚进视野（上方留两条，让上下文可见）。
     // 只在首次组合时算一次 —— 抽屉里手动滚动后不该被拽回去。
-    LaunchedEffect(entries, currentIndex) {
-        if (entries.isEmpty()) return@LaunchedEffect
-        val at = entries.indexOfLast { it.blockIndex <= currentIndex }
+    LaunchedEffect(shown, currentIndex) {
+        if (shown.isEmpty()) return@LaunchedEffect
+        val at = shown.indexOfLast { it.blockIndex <= currentIndex }
         if (at >= 0) listState.scrollToItem((at - 2).coerceAtLeast(0))
     }
 
@@ -75,15 +89,39 @@ fun TocSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text("在目录中查找", fontSize = Type.body) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Sp.l, vertical = Sp.xs)
+                    .focusRequester(focus)
+            )
+
             // 当前所在章节 = 最后一个「起始块不晚于当前块」的标题。
             // 不能用 blockIndex == currentIndex 精确匹配：正文停在一个表格或代码块里时，
             // 那个位置根本不是任何标题的索引，精确匹配会导致整份目录一个都不高亮。
-            val activeIndex = remember(entries, currentIndex) {
-                entries.indexOfLast { it.blockIndex <= currentIndex }
+            val activeIndex = remember(shown, currentIndex) {
+                shown.indexOfLast { it.blockIndex <= currentIndex }
+            }
+
+            if (shown.isEmpty()) {
+                Box(
+                    Modifier.fillMaxWidth().padding(vertical = Sp.xl),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "没有匹配「" + query.trim() + "」的标题",
+                        fontSize = Type.body,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 8.dp)) {
-                itemsIndexed(entries, key = { _, entry -> entry.blockIndex.toString() + ":" + entry.slug }) { index, entry ->
+                itemsIndexed(shown, key = { _, entry -> entry.blockIndex.toString() + ":" + entry.slug }) { index, entry ->
                     TocRow(
                         entry = entry,
                         active = index == activeIndex,

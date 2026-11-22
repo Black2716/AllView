@@ -90,6 +90,22 @@ object MiIcons {
         }
     }
 
+    /** 任务列表勾选框：未勾是空心方框，已勾是方框 + 对勾。 */
+    @Composable
+    fun TaskBox(checked: Boolean, tint: Color, size: Dp = 14.dp) = Frame(tint, size) { w, h, sw ->
+        val pad = w * 0.14f
+        // 方框
+        drawLine(tint, Offset(pad, pad), Offset(w - pad, pad), sw, StrokeCap.Round)
+        drawLine(tint, Offset(w - pad, pad), Offset(w - pad, h - pad), sw, StrokeCap.Round)
+        drawLine(tint, Offset(w - pad, h - pad), Offset(pad, h - pad), sw, StrokeCap.Round)
+        drawLine(tint, Offset(pad, h - pad), Offset(pad, pad), sw, StrokeCap.Round)
+        if (checked) {
+            // 对勾
+            drawLine(tint, Offset(w * 0.28f, h * 0.52f), Offset(w * 0.44f, h * 0.70f), sw, StrokeCap.Round)
+            drawLine(tint, Offset(w * 0.44f, h * 0.70f), Offset(w * 0.74f, h * 0.32f), sw, StrokeCap.Round)
+        }
+    }
+
     /** 字号图标用文字「Aa」更直观，单独提供一个 Composable 而不是画布路径。 */
     const val FONT_LABEL = "Aa"
 }

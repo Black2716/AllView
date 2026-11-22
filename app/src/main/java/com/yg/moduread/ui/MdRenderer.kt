@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -29,10 +30,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -70,8 +73,10 @@ fun MdBlockView(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     docUri: String? = null,
-    /** 文档内锚点（#slug）：交给上层解析成块索引并滚动，返回 true 表示已消费。 */
-    onAnchor: (String) -> Unit = {}
+    /** 链接点击：上层按 [MdDocResolver] 分派锚点 / 兄弟文档 / 外部浏览器。 */
+    onAnchor: (String) -> Unit = {},
+    /** 长按正文：用于加书签。参数是块自身（上层据此取摘要）。 */
+    onLongPress: (() -> Unit)? = null
 ) {
     when (block) {
         is MdBlock.Heading -> HeadingView(block, baseFontSize, modifier, onAnchor)
@@ -82,7 +87,8 @@ fun MdBlockView(
             modifier = modifier
                 .fillMaxWidth()
                 .padding(bottom = if (compact) 2.dp else baseFontSize.dp * 0.7f),
-            onAnchor = onAnchor
+            onAnchor = onAnchor,
+            onLongPress = onLongPress
         )
 
         is MdBlock.Quote -> QuoteView(block, baseFontSize, modifier, docUri, onAnchor)
@@ -224,14 +230,24 @@ private fun ListView(
 ) {
     Column(modifier.fillMaxWidth().padding(bottom = baseFontSize.dp * 0.4f)) {
         block.items.forEachIndexed { index, item ->
+            // 任务项用方框代替项目符号；其它项保持原样
+            val task = block.taskStates.getOrNull(index)
             Row(Modifier.fillMaxWidth().padding(vertical = if (block.tight) 1.dp else 3.dp)) {
-                Text(
-                    text = if (block.ordered) (block.start + index).toString() + "." else "•",
-                    fontSize = baseFontSize.sp,
-                    lineHeight = (baseFontSize * LINE_HEIGHT_RATIO).sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.widthIn(min = baseFontSize.dp * 1.5f)
-                )
+                if (task != null) {
+                    TaskCheckbox(
+                        checked = task,
+                        baseFontSize = baseFontSize,
+                        modifier = Modifier.widthIn(min = baseFontSize.dp * 1.5f)
+                    )
+                } else {
+                    Text(
+                        text = if (block.ordered) (block.start + index).toString() + "." else "•",
+                        fontSize = baseFontSize.sp,
+                        lineHeight = (baseFontSize * LINE_HEIGHT_RATIO).sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.widthIn(min = baseFontSize.dp * 1.5f)
+                    )
+                }
                 Column(Modifier.fillMaxWidth().padding(start = 6.dp)) {
                     item.forEach { child ->
                         MdBlockView(
@@ -267,6 +283,23 @@ private fun syntaxColors(): Map<TokenKind, Color> {
         TokenKind.NUMBER to Color(0xFF953800),
         TokenKind.FUNCTION to Color(0xFF0550AE)
     )
+}
+
+/**
+ * 任务列表的勾选框。只读 —— 阅读器不写回源文件，
+ * 所以这里用图标而不是可点击的 Checkbox，避免暗示「能勾」。
+ */
+@Composable
+private fun TaskCheckbox(checked: Boolean, baseFontSize: Float, modifier: Modifier = Modifier) {
+    val tint = if (checked) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.onSurfaceVariant
+    Box(modifier, contentAlignment = Alignment.CenterStart) {
+        MiIcons.TaskBox(
+            checked = checked,
+            tint = tint,
+            size = (baseFontSize * 0.82f).dp
+        )
+    }
 }
 
 @Composable
@@ -464,7 +497,8 @@ private fun MdText(
     fontWeight: FontWeight = FontWeight.Normal,
     textAlign: TextAlign = TextAlign.Start,
     color: Color? = null,
-    onAnchor: (String) -> Unit = {}
+    onAnchor: (String) -> Unit = {},
+    onLongPress: (() -> Unit)? = null
 ) {
     val uriHandler = LocalUriHandler.current
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -476,21 +510,33 @@ private fun MdText(
         textAlign = textAlign,
         color = color ?: MaterialTheme.colorScheme.onBackground,
         onTextLayout = { layout = it },
-        modifier = modifier.pointerInput(text) {
-            detectTapGestures { position ->
-                val result = layout ?: return@detectTapGestures
-                val offset = result.getOffsetForPosition(position)
-                text.getStringAnnotations("URL", offset, offset)
-                    .firstOrNull()
-                    ?.let { annotation ->
-                        // 页内锚点（#slug）交给上层解析成块索引并滚动；
-                        // 外部链接仍然交系统浏览器
-                        if (annotation.item.startsWith("#")) {
-                            onAnchor(annotation.item)
-                        } else {
-                            runCatching { uriHandler.openUri(annotation.item) }
+        // SelectionContainer 会消费 tap 手势，detectTapGestures 收不到事件，
+        // 所以这里自己判：按下到抬起位移很小 = 点击，超过阈值交给选择容器处理拖动。
+        modifier = modifier.pointerInput(text, layout, onLongPress) {
+            val slop = viewConfiguration.touchSlop
+            awaitPointerEventScope {
+                while (true) {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val startOffset = down.position
+                    var moved = false
+                    var up: PointerInputChange? = null
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if ((change.position - startOffset).getDistance() > slop) moved = true
+                        if (!change.pressed) { up = change; break }
+                        change.consume()
+                    }
+                    if (!moved && up != null) {
+                        val result = layout
+                        if (result != null) {
+                            val offset = result.getOffsetForPosition(up.position)
+                            text.getStringAnnotations("URL", offset, offset)
+                                .firstOrNull()
+                                ?.let { annotation -> onAnchor(annotation.item) }
                         }
                     }
+                }
             }
         }
     )

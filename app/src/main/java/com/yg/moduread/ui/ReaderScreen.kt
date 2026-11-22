@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -71,7 +72,11 @@ fun ReaderScreen(
     onVisibleBlock: (Int) -> Unit = {},
     onOpenToc: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
-    onAnchor: (String) -> Unit = {},
+    onOpenBookmarks: () -> Unit = {},
+    /** 长按某块正文（用于加书签）。参数是块索引。 */
+    onLongPressBlock: (Int) -> Unit = {},
+    /** 所有链接点击（锚点、相对路径、外部 URL）。 */
+    onLink: (String) -> Unit = {},
     /** 最近打开过的文件，空态页列出；点一项直接打开。 */
     recent: List<com.yg.moduread.data.RecentFile> = emptyList(),
     onOpenRecent: (String) -> Unit = {},
@@ -94,6 +99,15 @@ fun ReaderScreen(
     val showBar by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 220
+        }
+    }
+
+    // 阅读进度：用已滚过的块数占比。body 为空时按 0 处理，
+    // 除法不落在重组里 —— derivedStateOf 只在 index/size 变化时重算。
+    val progress by remember {
+        derivedStateOf {
+            if (body.isEmpty()) 0f
+            else (listState.firstVisibleItemIndex.toFloat() / body.size.toFloat()).coerceIn(0f, 1f)
         }
     }
 
@@ -175,13 +189,15 @@ fun ReaderScreen(
                     }
                     // 一块一项：索引即块索引，目录/搜索/书签都能直接定位。
                     // key 用「序号 + 类型 + 正文前 24 字」，跨重组稳定，滚动不抖。
-                    itemsIndexed(body, key = { i, block -> i.toString() + ':' + block.keyHint() }) { _, block ->
+                    itemsIndexed(body, key = { i, block -> i.toString() + ':' + block.keyHint() }) { index, block ->
                         SelectionContainer(Modifier.fillMaxWidth()) {
                             MdBlockView(
                                 block = block,
                                 baseFontSize = prefs.fontSizeSp,
                                 docUri = doc.docUri,
-                                onAnchor = onAnchor
+                                onAnchor = onLink,
+                                // 块索引要加 1：body 是 blocks.drop(1)，而书签按原始块下标存
+                                onLongPress = { onLongPressBlock(index + 1) }
                             )
                         }
                     }
@@ -197,17 +213,36 @@ fun ReaderScreen(
                 if (topBarAlpha > 0.01f) {
                     TopBar(
                         title = body.displayTitle(doc.title),
+                        progress = progress,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .graphicsLayer { alpha = topBarAlpha }
                     )
                 }
+                // 进度线贴在底部栏正上方，2dp 高，不占布局高度（用 Box 叠放）
+                Box(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 52.dp + bottomInsets)
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(progress)
+                            .fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.75f))
+                    )
+                }
+
                 ReaderBottomBar(
                     fontPanelOpen = fontPanelOpen,
                     onToggleFontPanel = { fontPanelOpen = !fontPanelOpen },
                     onOpenSettings = onOpenSettings,
                     onOpenToc = onOpenToc,
                     onOpenSearch = onOpenSearch,
+                    onOpenBookmarks = onOpenBookmarks,
                     onPickFile = onPickFile,
                     bottomPadding = bottomInsets,
                     modifier = Modifier.align(Alignment.BottomCenter)
@@ -268,15 +303,24 @@ private fun DocTitle(doc: DocumentState, fontSize: Float) {
 }
 
 @Composable
-private fun TopBar(title: String, modifier: Modifier) {
+private fun TopBar(title: String, progress: Float, modifier: Modifier) {
     Column(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
-        Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 text = title,
-                fontSize = 13.sp,
+                fontSize = Type.caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = (progress * 100).toInt().toString() + "%",
+                fontSize = Type.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Box(
@@ -304,6 +348,7 @@ private fun ReaderBottomBar(
     onOpenSettings: () -> Unit,
     onOpenToc: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenBookmarks: () -> Unit,
     onPickFile: () -> Unit,
     bottomPadding: androidx.compose.ui.unit.Dp,
     modifier: Modifier
@@ -359,6 +404,10 @@ private fun ReaderBottomBar(
                 text = { Text("换一个文件", fontSize = Type.bodyLarge) },
 
                 onClick = { moreOpen = false; onPickFile() }
+            )
+            DropdownMenuItem(
+                text = { Text("书签", fontSize = Type.bodyLarge) },
+                onClick = { moreOpen = false; onOpenBookmarks() }
             )
             DropdownMenuItem(
                 text = { Text("阅读设置", fontSize = Type.bodyLarge) },

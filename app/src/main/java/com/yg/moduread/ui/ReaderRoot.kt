@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.yg.moduread.data.MdDocResolver
 import com.yg.moduread.md.MdBlock
 import com.yg.moduread.md.plainText
 
@@ -26,6 +27,10 @@ fun ReaderRoot(vm: ReaderViewModel) {
     val recent by vm.recent.collectAsStateWithLifecycle()
     var tocVisible by remember { mutableStateOf(false) }
     var searchVisible by remember { mutableStateOf(false) }
+    var bookmarksVisible by remember { mutableStateOf(false) }
+    // 相对路径打不开时记下想去的文档，等用户在 SAF 里选完再核对
+    val pendingDocLink = remember { mutableStateOf<String?>(null) }
+    val bookmarks by vm.bookmarks.collectAsStateWithLifecycle()
     val currentIndex = remember(doc.docUri) { mutableStateOf(0) }
 
     val context = LocalContext.current
@@ -80,11 +85,35 @@ fun ReaderRoot(vm: ReaderViewModel) {
                 onVisibleBlock = { index -> currentIndex.value = index },
                 onOpenToc = { tocVisible = true },
                 onOpenSearch = { searchVisible = true },
+                onOpenBookmarks = { bookmarksVisible = true },
+                onLongPressBlock = { blockIndex -> vm.addBookmark(blockIndex) },
                 // 文档内锚点：#slug -> 块索引 -> 跳转
-                onAnchor = { url ->
-                    // body = blocks.drop(1) 且列表 0 号是页首标题项，
-                    // 两级偏移正好抵消：列表 item 下标 == 块下标
-                    vm.resolveAnchor(url)?.let(vm::requestJump)
+                onLink = { url ->
+                    when {
+                        // 1) 文档内锚点
+                        url.startsWith("#") -> vm.resolveAnchor(url)?.let(vm::requestJump)
+                        // 2) 兄弟文档（.md 相对路径）
+                        MdDocResolver.isRelativeDocLink(url) && MdDocResolver.isMarkdownPath(url) -> {
+                            val target = MdDocResolver.resolve(context, doc.docUri, url)
+                            if (target != null) {
+                                vm.open(target)
+                            } else {
+                                // 分区存储下未被授权过的兄弟文档读不到（平台限制，不是缺陷）。
+                                // 回退到 SAF：用户选一次即拿到持久授权，之后再点就直接打开。
+                                pendingDocLink.value = url
+                                picker.launch(
+                                    arrayOf("text/markdown", "text/x-markdown", "text/plain", "application/octet-stream")
+                                )
+                            }
+                        }
+                        // 3) 其余（http/https 等）交给系统浏览器
+                        else -> runCatching { context.startActivity(
+                            android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(url)
+                            )
+                        ) }
+                    }
                 },
                 jumpTarget = vm.jumpTo.collectAsStateWithLifecycle().value,
                 onJumpConsumed = vm::consumeJump,
@@ -92,6 +121,20 @@ fun ReaderRoot(vm: ReaderViewModel) {
                 onOpenRecent = { uri -> runCatching { Uri.parse(uri) }.getOrNull()?.let(vm::open) },
                 onForgetRecent = vm::forgetRecent
             )
+
+            if (bookmarksVisible) {
+                BookmarkSheet(
+                    bookmarks = bookmarks,
+                    onOpen = { mark ->
+                        // 文档改版后摘要对不上就不跳，避免落到错误位置
+                        if (vm.jumpToBookmark(mark)) {
+                            bookmarksVisible = false
+                        }
+                    },
+                    onDelete = { mark -> vm.removeBookmark(mark.blockIndex) },
+                    onDismiss = { bookmarksVisible = false }
+                )
+            }
 
             if (searchVisible) {
                 SearchSheet(

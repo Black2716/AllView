@@ -6,9 +6,12 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.yg.moduread.data.DocRepository
+import com.yg.moduread.data.Bookmark
+import com.yg.moduread.data.Bookmarks
 import com.yg.moduread.data.RecentFile
 import com.yg.moduread.data.RecentFiles
 import com.yg.moduread.md.MdToc
+import com.yg.moduread.md.bookmarkExcerpt
 import com.yg.moduread.md.SearchIndex
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,9 +23,14 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = app.getSharedPreferences("moduread", Application.MODE_PRIVATE)
     private val recentFiles = RecentFiles(prefs)
+    private val bookmarkStore = Bookmarks(prefs)
 
     private val _recent = MutableStateFlow(recentFiles.list())
     val recent: StateFlow<List<RecentFile>> = _recent.asStateFlow()
+
+    private val _bookmarks = MutableStateFlow<List<Bookmark>>(emptyList())
+    /** 当前文档的书签列表。 */
+    val bookmarks: StateFlow<List<Bookmark>> = _bookmarks.asStateFlow()
 
     private val _doc = MutableStateFlow(DocumentState())
     val doc: StateFlow<DocumentState> = _doc.asStateFlow()
@@ -118,6 +126,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.edit().putString(KEY_LAST_URI, uri.toString()).apply()
                 recentFiles.remember(uri.toString(), loaded.title)
                 _recent.value = recentFiles.list()
+                _bookmarks.value = bookmarkStore.list(uri.toString())
             }.onFailure { e ->
                 _doc.update {
                     it.copy(loading = false, error = if (silent) null else friendlyError(e))
@@ -198,6 +207,42 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     fun setReadingTheme(theme: ReadingTheme) {
         _readerPrefs.update { it.copy(readingTheme = theme) }
         prefs.edit().putString(KEY_READING_THEME, theme.name).apply()
+    }
+
+    /** 给某个块加书签。同一块重复加会更新摘要与时间，不会重复。 */
+    fun addBookmark(blockIndex: Int) {
+        val uri = _doc.value.docUri ?: return
+        val blocks = _doc.value.blocks
+        if (blockIndex !in blocks.indices) return
+        val excerpt = blocks[blockIndex].bookmarkExcerpt()
+        bookmarkStore.add(
+            Bookmark(
+                uri = uri,
+                blockIndex = blockIndex,
+                excerpt = excerpt,
+                createdAt = System.currentTimeMillis()
+            )
+        )
+        _bookmarks.value = bookmarkStore.list(uri)
+    }
+
+    fun removeBookmark(blockIndex: Int) {
+        val uri = _doc.value.docUri ?: return
+        bookmarkStore.remove(uri, blockIndex)
+        _bookmarks.value = bookmarkStore.list(uri)
+    }
+
+    /**
+     * 从书签跳转。文档改版后 blockIndex 会错位，
+     * 这里用摘要做二次校验：对不上就返回 false，让界面提示而不是跳到错误位置。
+     */
+    fun jumpToBookmark(bookmark: Bookmark): Boolean {
+        val blocks = _doc.value.blocks
+        if (bookmark.blockIndex !in blocks.indices) return false
+        val current = blocks[bookmark.blockIndex].bookmarkExcerpt()
+        if (current != bookmark.excerpt) return false
+        requestJump(bookmark.blockIndex)
+        return true
     }
 
     fun setSettingsVisible(visible: Boolean) {

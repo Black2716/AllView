@@ -28,7 +28,12 @@ sealed interface MdBlock {
         val ordered: Boolean,
         val start: Int,
         val tight: Boolean,
-        val items: List<List<MdBlock>>
+        val items: List<List<MdBlock>>,
+        /**
+         * 任务列表的勾选态，与 [items] 同下标；普通列表项为 null。
+         * 只读 —— 阅读器不写回源文件，所以不做点击交互。
+         */
+        val taskStates: List<Boolean?> = emptyList()
     ) : MdBlock
 
     data class CodeBlock(val code: String, val language: String?) : MdBlock
