@@ -29,12 +29,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -500,8 +502,60 @@ private fun MdText(
     onAnchor: (String) -> Unit = {},
     onLongPress: (() -> Unit)? = null
 ) {
-    val uriHandler = LocalUriHandler.current
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+
+    // 用 rememberUpdatedState 拿最新回调与布局结果：
+    // 若把它们作为 pointerInput 的 key，每次 onTextLayout 都会重启协程并重建事件循环，
+    // 长文档滚动会持续掉帧。
+    val latestLayout = rememberUpdatedState(layout)
+    val latestOnAnchor = rememberUpdatedState(onAnchor)
+    val latestOnLongPress = rememberUpdatedState(onLongPress)
+
+    // 点击识别：只在 Final 阶段观察事件。
+    //
+    // 这是滚动流畅的关键 —— Main 阶段会抢在父级 LazyColumn 的滚动之前拿到事件，
+    // 导致整份文档滑不动（实测滑动完全无响应）。Final 阶段等子级都处理完再看，
+    // 既不影响滚动与文本选择，也能取到抬起坐标做 URL 命中。
+    val tapModifier = Modifier.pointerInput(text) {
+        val slop = viewConfiguration.touchSlop
+        awaitPointerEventScope {
+            while (true) {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Final)
+                val startOffset = down.position
+                var moved = false
+                var up: PointerInputChange? = null
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Final)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if ((change.position - startOffset).getDistance() > slop) moved = true
+                    if (!change.pressed) { up = change; break }
+                }
+                if (!moved && up != null) {
+                    val result = latestLayout.value
+                    if (result != null) {
+                        val offset = result.getOffsetForPosition(up.position)
+                        text.getStringAnnotations("URL", offset, offset)
+                            .firstOrNull()
+                            ?.let { annotation -> latestOnAnchor.value(annotation.item) }
+                    }
+                }
+            }
+        }
+    }
+
+    // 长按：交给 detectTapGestures，它本身不消费移动事件。
+    // 仅在需要长按（正文段落）时挂载，标题/表格等不挂，避免无谓的手势节点。
+    val longPressModifier = if (onLongPress != null) {
+        Modifier.pointerInput(text) {
+            detectTapGestures(
+                onLongPress = { latestOnLongPress.value?.invoke() },
+                onTap = {}
+            )
+        }
+    } else {
+        Modifier
+    }
+
     Text(
         text = text,
         fontSize = fontSize,
@@ -510,35 +564,7 @@ private fun MdText(
         textAlign = textAlign,
         color = color ?: MaterialTheme.colorScheme.onBackground,
         onTextLayout = { layout = it },
-        // SelectionContainer 会消费 tap 手势，detectTapGestures 收不到事件，
-        // 所以这里自己判：按下到抬起位移很小 = 点击，超过阈值交给选择容器处理拖动。
-        modifier = modifier.pointerInput(text, layout, onLongPress) {
-            val slop = viewConfiguration.touchSlop
-            awaitPointerEventScope {
-                while (true) {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    val startOffset = down.position
-                    var moved = false
-                    var up: PointerInputChange? = null
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if ((change.position - startOffset).getDistance() > slop) moved = true
-                        if (!change.pressed) { up = change; break }
-                        change.consume()
-                    }
-                    if (!moved && up != null) {
-                        val result = layout
-                        if (result != null) {
-                            val offset = result.getOffsetForPosition(up.position)
-                            text.getStringAnnotations("URL", offset, offset)
-                                .firstOrNull()
-                                ?.let { annotation -> onAnchor(annotation.item) }
-                        }
-                    }
-                }
-            }
-        }
+        modifier = modifier.then(tapModifier).then(longPressModifier)
     )
 }
 

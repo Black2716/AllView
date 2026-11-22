@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -461,14 +462,16 @@ private fun FontPanel(
     onFontChange: (Float) -> Unit,
     onDismiss: () -> Unit
 ) {
+    // fillMaxWidth 之后 Box 的 align 不再居中生效，内容会贴在左侧 padding 边界上。
+    // 用 wrapContentWidth + 水平居中的 Row 让胶囊整体居中。
     Row(
         Modifier
-            .padding(horizontal = Sp.l)
-            .fillMaxWidth()
+            .wrapContentWidth()
             .clip(Shapes.card)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .padding(horizontal = Sp.m, vertical = Sp.s),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
     ) {
         Text(
             text = "A",
