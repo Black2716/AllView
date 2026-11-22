@@ -37,6 +37,12 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     // ── 多开：会话列表 + 活动会话 id ──────────────────────────────
     private var nextSessionId = 1L
+    /**
+     * 待切到的活动文档 uri。
+     * 恢复多开时，open() 是异步的 —— 立刻按 docUri 匹配会全是 null，
+     * 只能退回「最后一个标签」。所以先记下目标，等对应会话加载完成再切过去。
+     */
+    private var pendingActiveUri: String? = null
     private val _sessions = MutableStateFlow<List<DocSession>>(emptyList())
     val sessions: StateFlow<List<DocSession>> = _sessions.asStateFlow()
 
@@ -135,14 +141,9 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             uris.forEach { s ->
                 runCatching { Uri.parse(s) }.getOrNull()?.let { open(it, silent = true, newTab = true) }
             }
-            // 回到上次活动的那一本；找不到（文件被删）就留在最后一个成功的标签
-            val wantActive = prefs.getString(KEY_ACTIVE_URI, null)
-            val active = _sessions.value.firstOrNull { it.doc.docUri == wantActive }
-            if (active != null) {
-                switchTo(active.id)
-            } else {
-                _activeId.value = _sessions.value.lastOrNull()?.id
-            }
+            // 回到上次活动的那一本。此时各会话都在异步加载，docUri 还没落定，
+            // 所以只记下目标，真正切换放到加载成功回调里做。
+            pendingActiveUri = prefs.getString(KEY_ACTIVE_URI, null)
             return
         }
 
@@ -161,6 +162,9 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         val existing = _sessions.value.firstOrNull { it.doc.docUri == key && !newTab }
         if (existing != null) {
             _activeId.value = existing.id
+            // 复用一个已开的标签也是一次「切换」，同样要记住，
+            // 否则重启后会回到上一个活动标签而不是这里
+            prefs.edit().putString(KEY_ACTIVE_URI, existing.doc.docUri).apply()
             return
         }
         openInNewSession(uri, silent)
@@ -205,6 +209,11 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 recentFiles.remember(uri.toString(), loaded.title)
                 _recent.value = recentFiles.list()
                 _bookmarks.value = bookmarkStore.list(uri.toString())
+                // 该会话正好是上次停留的那一本就切过去（恢复多开时的活动标签）
+                if (pendingActiveUri != null && loaded.docUri == pendingActiveUri) {
+                    _activeId.value = id
+                    pendingActiveUri = null
+                }
                 persistSessionUris()
             }.onFailure { e ->
                 updateDoc {

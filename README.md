@@ -11,7 +11,7 @@
 | 技术栈 | Kotlin + Jetpack Compose（Material 3） |
 | minSdk / targetSdk / compileSdk | 24 / 34 / 34 |
 | 解析内核 | commonmark-java 0.22.0 + GFM Tables |
-| release APK 实测体积 | **1.22 MB**（1,277,379 字节；R8 + 资源压缩，含公式/目录/搜索/高亮、重做界面与纸张主题） |
+| release APK 实测体积 | **1.22 MB**（1,277,335 字节；R8 + 资源压缩，含公式/目录/搜索/高亮、重做界面与纸张主题） |
 | debug APK 实测体积 | 7.8 MB（不裁剪，仅用于调试） |
 | 冷启动（Pixel 后端 API 34 模拟器，host GPU） | **302–505 ms**（`Displayed` 打点） |
 | 9.2 万字文档打开到首屏可读 | 约 3.4 s（含 `uiautomator` 轮询开销） |
