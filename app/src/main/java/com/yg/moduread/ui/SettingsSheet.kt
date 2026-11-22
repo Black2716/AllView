@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,7 @@ fun SettingsSheet(
     prefs: ReaderPrefs,
     onFontChange: (Float) -> Unit,
     onThemeChange: (ThemeMode) -> Unit,
+    onReadingThemeChange: (ReadingTheme) -> Unit,
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -122,6 +124,29 @@ fun SettingsSheet(
                     ThemeChip("深色", ThemeMode.DARK, prefs.themeMode, onThemeChange, Modifier.weight(1f))
                 }
             }
+
+            Spacer(Modifier.height(Sp.m))
+
+            // 纸张色调：底色微调，与深/浅正交
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(Shapes.card)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .padding(horizontal = Sp.m, vertical = Sp.m)
+            ) {
+                Text(
+                    text = "纸张",
+                    fontSize = Type.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(Sp.s))
+                Row(horizontalArrangement = Arrangement.spacedBy(Sp.s)) {
+                    PaperChip("纸白", ReadingTheme.PAPER, prefs.readingTheme, onReadingThemeChange, Modifier.weight(1f))
+                    PaperChip("米黄", ReadingTheme.SEPIA, prefs.readingTheme, onReadingThemeChange, Modifier.weight(1f))
+                    PaperChip("夜间", ReadingTheme.NIGHT, prefs.readingTheme, onReadingThemeChange, Modifier.weight(1f))
+                }
+            }
         }
     }
 }
@@ -134,6 +159,50 @@ private fun SectionTitle(text: String) {
         fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+}
+
+/** 纸张色调选项。选中态直接画出该纸张的底色，比纯文字更直观。 */
+@Composable
+private fun PaperChip(
+    label: String,
+    theme: ReadingTheme,
+    current: ReadingTheme,
+    onSelect: (ReadingTheme) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val selected = theme == current
+    val swatch = when (theme) {
+        ReadingTheme.PAPER -> Color(0xFFFCFCFA)
+        ReadingTheme.SEPIA -> Color(0xFFF6F1E4)
+        ReadingTheme.NIGHT -> Color(0xFF1B1A18)
+    }
+    Row(
+        modifier
+            .clip(Shapes.chip)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceContainerHighest
+            )
+            .clickable { onSelect(theme) }
+            .padding(vertical = Sp.s + 2.dp, horizontal = Sp.s),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .clip(Shapes.pill)
+                .background(swatch)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = label,
+            fontSize = Type.body,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 @Composable

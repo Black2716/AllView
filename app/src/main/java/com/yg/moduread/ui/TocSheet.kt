@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,6 +46,16 @@ fun TocSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val listState = rememberLazyListState()
+
+    // 打开抽屉时把当前章节滚进视野（上方留两条，让上下文可见）。
+    // 只在首次组合时算一次 —— 抽屉里手动滚动后不该被拽回去。
+    LaunchedEffect(entries, currentIndex) {
+        if (entries.isEmpty()) return@LaunchedEffect
+        val at = entries.indexOfLast { it.blockIndex <= currentIndex }
+        if (at >= 0) listState.scrollToItem((at - 2).coerceAtLeast(0))
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
             Row(
@@ -61,11 +75,18 @@ fun TocSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
-                items(entries, key = { it.blockIndex.toString() + ":" + it.slug }) { entry ->
+            // 当前所在章节 = 最后一个「起始块不晚于当前块」的标题。
+            // 不能用 blockIndex == currentIndex 精确匹配：正文停在一个表格或代码块里时，
+            // 那个位置根本不是任何标题的索引，精确匹配会导致整份目录一个都不高亮。
+            val activeIndex = remember(entries, currentIndex) {
+                entries.indexOfLast { it.blockIndex <= currentIndex }
+            }
+
+            LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 8.dp)) {
+                itemsIndexed(entries, key = { _, entry -> entry.blockIndex.toString() + ":" + entry.slug }) { index, entry ->
                     TocRow(
                         entry = entry,
-                        active = entry.blockIndex == currentIndex,
+                        active = index == activeIndex,
                         onClick = { onSelect(entry.blockIndex) }
                     )
                 }
@@ -84,8 +105,8 @@ private fun TocRow(entry: TocEntry, active: Boolean, onClick: () -> Unit) {
             .padding(horizontal = 12.dp, vertical = 1.dp)
             .clip(Shapes.chip)
             .background(
-                if (active) MaterialTheme.colorScheme.surfaceVariant
-                else MaterialTheme.colorScheme.surface
+                if (active) MaterialTheme.colorScheme.primaryContainer
+                else Color.Transparent
             )
             .clickable(onClick = onClick)
             .padding(start = 8.dp + indent.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),

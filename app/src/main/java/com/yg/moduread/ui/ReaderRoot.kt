@@ -77,6 +77,7 @@ fun ReaderRoot(vm: ReaderViewModel) {
                     vm.saveProgress(index, offset)
                     currentIndex.value = index
                 },
+                onVisibleBlock = { index -> currentIndex.value = index },
                 onOpenToc = { tocVisible = true },
                 onOpenSearch = { searchVisible = true },
                 // 文档内锚点：#slug -> 块索引 -> 跳转
@@ -120,6 +121,7 @@ fun ReaderRoot(vm: ReaderViewModel) {
                     prefs = prefs,
                     onFontChange = vm::setFontSize,
                     onThemeChange = vm::setThemeMode,
+                    onReadingThemeChange = vm::setReadingTheme,
                     onDismiss = { vm.setSettingsVisible(false) }
                 )
             }

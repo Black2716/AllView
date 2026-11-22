@@ -13,6 +13,56 @@ import androidx.core.view.WindowCompat
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
+/**
+ * 纸张色调叠加在深/浅之上：
+ *  - PAPER：原本的纸白 / 夜间灰黑
+ *  - SEPIA：米黄纸（只影响浅色；深色模式下等同于 NIGHT，因为暖色底配亮字会发脏）
+ *  - NIGHT：更深的纯阅读底（浅色模式也压暗，适合暗环境）
+ * 只改 background/surface 四个值，其余角色不动，避免整套配色重新校准。
+ */
+private fun androidx.compose.material3.ColorScheme.withPaper(theme: ReadingTheme, dark: Boolean): androidx.compose.material3.ColorScheme {
+    if (theme == ReadingTheme.PAPER) return this
+    return when {
+        // 浅色 + 米黄
+        !dark && theme == ReadingTheme.SEPIA -> copy(
+            background = Color(0xFFF6F1E4),
+            surface = Color(0xFFF6F1E4),
+            surfaceContainerLow = Color(0xFFF1EBDC),
+            surfaceContainer = Color(0xFFEBE4D3),
+            surfaceContainerHigh = Color(0xFFE4DCC9),
+            surfaceContainerHighest = Color(0xFFDDD4C0)
+        )
+        // 浅色 + 夜间纸：压到接近深色，但保留一点暖
+        !dark && theme == ReadingTheme.NIGHT -> copy(
+            background = Color(0xFF1B1A18),
+            onBackground = Color(0xFFD9D5CE),
+            surface = Color(0xFF1B1A18),
+            onSurface = Color(0xFFD9D5CE),
+            surfaceContainerLow = Color(0xFF211F1D),
+            surfaceContainer = Color(0xFF262421),
+            surfaceContainerHigh = Color(0xFF2C2A26),
+            surfaceContainerHighest = Color(0xFF33302B),
+            surfaceVariant = Color(0xFF262421),
+            onSurfaceVariant = Color(0xFFA8A39A),
+            outline = Color(0xFF3A3733),
+            outlineVariant = Color(0xFF2E2B27)
+        )
+        // 深色 + 米黄：暖调深底
+        dark && theme == ReadingTheme.SEPIA -> copy(
+            background = Color(0xFF1E1A14),
+            onBackground = Color(0xFFE6DCC8),
+            surface = Color(0xFF1E1A14),
+            onSurface = Color(0xFFE6DCC8),
+            surfaceContainerLow = Color(0xFF241F18),
+            surfaceContainer = Color(0xFF2A241C),
+            surfaceContainerHigh = Color(0xFF312A20),
+            surfaceContainerHighest = Color(0xFF383025),
+            onSurfaceVariant = Color(0xFFB8AC95)
+        )
+        else -> this
+    }
+}
+
 // 纸感浅色 / 夜间深色，两组配色都保证正文对比度 > 12:1
 private val LightColors = lightColorScheme(
     primary = Color(0xFF2F6FEB),
@@ -56,13 +106,15 @@ private val DarkColors = darkColorScheme(
     onSecondary = Color(0xFF0B1220),
     tertiary = Color(0xFFD9B98A),
     onTertiary = Color(0xFF231A0A),
-    background = Color(0xFF111315),
+    // 深色底从 #111315 降到 #0E1013：纯黑护眼但纯 #000 在 OLED 上会有拖影，
+    // #0E1013 是「够暗但不刺激」的折中
+    background = Color(0xFF0E1013),
     onBackground = Color(0xFFE4E4E4),
-    surface = Color(0xFF111315),
+    surface = Color(0xFF0E1013),
     onSurface = Color(0xFFE4E4E4),
     surfaceVariant = Color(0xFF1C1F23),
     onSurfaceVariant = Color(0xFFB4B4B4),
-    surfaceContainerLowest = Color(0xFF0C0E10),
+    surfaceContainerLowest = Color(0xFF0A0C0E),
     surfaceContainerLow = Color(0xFF15181B),
     surfaceContainer = Color(0xFF1C1F23),
     surfaceContainerHigh = Color(0xFF23272C),
@@ -88,7 +140,11 @@ private fun android.content.Context.findActivity(): android.app.Activity? {
 }
 
 @Composable
-fun AppTheme(mode: ThemeMode, content: @Composable () -> Unit) {
+fun AppTheme(
+    mode: ThemeMode,
+    readingTheme: ReadingTheme = ReadingTheme.PAPER,
+    content: @Composable () -> Unit
+) {
     val dark = when (mode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
@@ -108,8 +164,9 @@ fun AppTheme(mode: ThemeMode, content: @Composable () -> Unit) {
             }
         }
     }
+    val base = if (dark) DarkColors else LightColors
     MaterialTheme(
-        colorScheme = if (dark) DarkColors else LightColors,
+        colorScheme = base.withPaper(readingTheme, dark),
         content = content
     )
 }

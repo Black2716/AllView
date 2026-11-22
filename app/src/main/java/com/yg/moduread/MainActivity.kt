@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         vm.pendingExternalUri = ExternalOpen.uriOf(intent)
         setContent {
             val prefs by vm.readerPrefs.collectAsStateWithLifecycle()
-            AppTheme(mode = prefs.themeMode) {
+            AppTheme(mode = prefs.themeMode, readingTheme = prefs.readingTheme) {
                 ReaderRoot(vm)
             }
         }

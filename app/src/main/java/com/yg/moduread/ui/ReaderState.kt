@@ -24,10 +24,14 @@ data class DocumentState(
     val error: String? = null
 )
 
+/** 纸张色调。与深/浅无关 —— 米黄在浅色模式下表更暖，夜间模式本身是深色。 */
+enum class ReadingTheme { PAPER, SEPIA, NIGHT }
+
 @Immutable
 data class ReaderPrefs(
     val fontSizeSp: Float = 17f,
-    val themeMode: ThemeMode = ThemeMode.SYSTEM
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val readingTheme: ReadingTheme = ReadingTheme.PAPER
 ) {
     companion object {
         const val MIN_FONT = 13f

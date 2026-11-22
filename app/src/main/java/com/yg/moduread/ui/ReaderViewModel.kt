@@ -32,7 +32,10 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             fontSizeSp = prefs.getFloat(KEY_FONT, 17f),
             themeMode = runCatching {
                 ThemeMode.valueOf(prefs.getString(KEY_THEME, ThemeMode.SYSTEM.name)!!)
-            }.getOrDefault(ThemeMode.SYSTEM)
+            }.getOrDefault(ThemeMode.SYSTEM),
+            readingTheme = runCatching {
+                ReadingTheme.valueOf(prefs.getString(KEY_READING_THEME, ReadingTheme.PAPER.name)!!)
+            }.getOrDefault(ReadingTheme.PAPER)
         )
     )
     val readerPrefs: StateFlow<ReaderPrefs> = _readerPrefs.asStateFlow()
@@ -192,6 +195,11 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString(KEY_THEME, mode.name).apply()
     }
 
+    fun setReadingTheme(theme: ReadingTheme) {
+        _readerPrefs.update { it.copy(readingTheme = theme) }
+        prefs.edit().putString(KEY_READING_THEME, theme.name).apply()
+    }
+
     fun setSettingsVisible(visible: Boolean) {
         _showSettings.value = visible
     }
@@ -199,6 +207,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val KEY_FONT = "font_size"
         const val KEY_THEME = "theme_mode"
+        const val KEY_READING_THEME = "reading_theme"
         const val KEY_LAST_URI = "last_uri"
         const val KEY_PROGRESS_INDEX = "progress_index_"
         const val KEY_PROGRESS_OFFSET = "progress_offset_"

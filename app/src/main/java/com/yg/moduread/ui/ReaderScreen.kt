@@ -67,6 +67,8 @@ fun ReaderScreen(
     onFontChange: (Float) -> Unit,
     onOpenSettings: () -> Unit,
     onSaveProgress: (Int, Int) -> Unit = { _, _ -> },
+    /** 当前可见块索引（用于目录高亮跟随），与落盘节流分开，要求即时。 */
+    onVisibleBlock: (Int) -> Unit = {},
     onOpenToc: () -> Unit = {},
     onOpenSearch: () -> Unit = {},
     onAnchor: (String) -> Unit = {},
@@ -119,6 +121,13 @@ fun ReaderScreen(
 
     // 字号浮层的开合状态。放这里而不是每个按钮里，切换文档时保持用户的选择
     var fontPanelOpen by remember { mutableStateOf(false) }
+
+    // 可见块即时上报：目录抽屉打开时用它高亮当前章节。
+    // 与落盘的 1 秒节流分开 —— 高亮要跟手，写盘不需要。
+    LaunchedEffect(listState, body.size) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .collect { index -> onVisibleBlock(index.coerceIn(0, body.size)) }
+    }
 
     // 位置变化后节流 1 秒落盘，避免每帧都写 SharedPreferences
     LaunchedEffect(listState, doc.docUri) {
