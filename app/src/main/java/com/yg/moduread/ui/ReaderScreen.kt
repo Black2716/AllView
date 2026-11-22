@@ -96,16 +96,20 @@ fun ReaderScreen(
             else -> doc.blocks
         }
     }
-    // 滚动后顶部栏淡入，停在顶部时隐藏，把版面还给文字
-    val showBar by remember {
+    // 滚动后顶部栏淡入，停在顶部时隐藏，把版面还给文字。
+    // 带 docUri 作 key：切换文档时列表位置会被重置，顶栏状态也要跟着归位。
+    val showBar by remember(doc.docUri) {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 220
         }
     }
 
-    // 阅读进度：用已滚过的块数占比。body 为空时按 0 处理，
-    // 除法不落在重组里 —— derivedStateOf 只在 index/size 变化时重算。
-    val progress by remember {
+    // 阅读进度：已滚过的块数占比。
+    //
+    // remember 必须带 body 作为 key。文档是异步加载的，首次组合时 body 还是空列表；
+    // 若不加 key，闭包会一直捕获那个空列表，条件永远走 body.isEmpty() -> 0f，
+    // 进度就卡死在 0%（这正是之前的 bug）。
+    val progress by remember(body) {
         derivedStateOf {
             if (body.isEmpty()) 0f
             else (listState.firstVisibleItemIndex.toFloat() / body.size.toFloat()).coerceIn(0f, 1f)
@@ -391,30 +395,36 @@ private fun ReaderBottomBar(
                 modifier = Modifier.weight(1f),
                 draw = { tint -> FontGlyph(tint) }
             )
-            BarIcon(
-                label = "更多",
-                onClick = { moreOpen = true },
-                modifier = Modifier.weight(1f),
-                draw = { tint -> MiIcons.More(tint) }
-            )
-        }
+            // 「⋯」下拉必须锚定到这个按钮本身。
+            // 直接放在 Column 里的话，锚点是整个 Column 的左上角，菜单会贴屏幕最左边。
+            Box(Modifier.weight(1f)) {
+                BarIcon(
+                    label = "更多",
+                    onClick = { moreOpen = true },
+                    active = moreOpen,
+                    modifier = Modifier.fillMaxWidth(),
+                    draw = { tint -> MiIcons.More(tint) }
+                )
 
-        // 「⋯」下拉：低频操作都放这儿，不再占用主栏
-        DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-            DropdownMenuItem(
-                text = { Text("换一个文件", fontSize = Type.bodyLarge) },
-
-                onClick = { moreOpen = false; onPickFile() }
-            )
-            DropdownMenuItem(
-                text = { Text("书签", fontSize = Type.bodyLarge) },
-                onClick = { moreOpen = false; onOpenBookmarks() }
-            )
-            DropdownMenuItem(
-                text = { Text("阅读设置", fontSize = Type.bodyLarge) },
-
-                onClick = { moreOpen = false; onOpenSettings() }
-            )
+                // 低频操作都放这儿，不占用主栏
+                DropdownMenu(
+                    expanded = moreOpen,
+                    onDismissRequest = { moreOpen = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("换一个文件", fontSize = Type.bodyLarge) },
+                        onClick = { moreOpen = false; onPickFile() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("书签", fontSize = Type.bodyLarge) },
+                        onClick = { moreOpen = false; onOpenBookmarks() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("阅读设置", fontSize = Type.bodyLarge) },
+                        onClick = { moreOpen = false; onOpenSettings() }
+                    )
+                }
+            }
         }
     }
 }
