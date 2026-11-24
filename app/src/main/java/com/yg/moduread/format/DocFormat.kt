@@ -22,6 +22,8 @@ enum class DocFormat {
     DOCX,
     ODT,
     HTML,
+    /** 源码文件：按扩展名挑语言做语法高亮。 */
+    CODE,
     PDF;
 
     /** 是否由 ZIP + XML 容器解析（需要读包内图片）。 */
@@ -56,6 +58,11 @@ enum class DocFormat {
                 "docx" -> DOCX
                 "odt" -> ODT
                 "html", "htm" -> HTML
+                "kt", "kts", "java", "py", "js", "ts", "jsx", "tsx",
+                "c", "h", "cpp", "cc", "hpp", "cs", "go", "rs",
+                "rb", "php", "swift", "m", "scala", "lua", "pl", "r",
+                "sql", "sh", "bash", "zsh", "ps1", "bat", "cmd", "gradle",
+                "groovy", "css", "scss", "less", "vue", "toml" -> CODE
                 "pdf" -> PDF
                 else -> null
             }
@@ -77,6 +84,7 @@ enum class DocFormat {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> DOCX
                 "application/vnd.oasis.opendocument.text" -> ODT
                 "text/html" -> HTML
+                "application/javascript", "text/javascript", "application/x-sh" -> CODE
                 "application/pdf" -> PDF
                 else -> null
             }
@@ -99,6 +107,7 @@ enum class DocFormat {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "application/vnd.oasis.opendocument.text",
             "application/pdf",
+            "application/javascript", "text/javascript", "application/x-sh",
             "application/octet-stream"
         )
     }

@@ -467,4 +467,40 @@ object TextAdapters {
         }
         return out.toString()
     }
+
+    // ── 源码文件 ────────────────────────────────────────────────
+
+    /**
+     * 源码：整份文件一个高亮代码块。
+     *
+     * 不按行切块 —— 代码的缩进与上下文需要连续呈现，
+     * 拆成多块反而破坏对齐，也让复制变得麻烦。
+     * 语言由扩展名决定（见 [languageOfFile]），未知扩展名按纯文本处理。
+     */
+    fun source(text: String, fileName: String?): ParsedDoc {
+        val lang = languageOfFile(fileName)
+        val body = text.trimEnd()
+        if (body.isEmpty()) return ParsedDoc(emptyList(), "")
+        return ParsedDoc(listOf(MdBlock.CodeBlock(body, lang)), text)
+    }
+
+    /**
+     * 文件名 -> 高亮器认识的语言名。
+     *
+     * 只返回 [com.yg.moduread.md.CodeHighlighter] 真正支持的几种；
+     * 其余源码格式（java/go/rs 等）没有对应词法，返回 null 走纯文本，
+     * 保证"能读"而不是用错的关键字表染出奇怪的颜色。
+     */
+    fun languageOfFile(fileName: String?): String? {
+        if (fileName.isNullOrBlank()) return null
+        val ext = fileName.substringAfterLast('.', "").lowercase()
+        return when (ext) {
+            "kt", "kts" -> "kotlin"
+            "py" -> "python"
+            "sh", "bash", "zsh" -> "bash"
+            "json" -> "json"
+            // 其余暂时没有词法表
+            else -> null
+        }
+    }
 }

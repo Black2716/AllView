@@ -69,4 +69,41 @@ class CodeHighlighterTest {
     fun emptyCodeProducesNothing() {
         assertTrue(CodeHighlighter.tokenize("", "kotlin").isEmpty())
     }
+
+    @Test
+    fun supportsMainstreamSourceLanguages() {
+        assertTrue(CodeHighlighter.supports("java"))
+        assertTrue(CodeHighlighter.supports("js"))
+        assertTrue(CodeHighlighter.supports("go"))
+        assertTrue(CodeHighlighter.supports("rs"))
+        assertTrue(CodeHighlighter.supports("cpp"))
+        assertTrue(CodeHighlighter.supports("sql"))
+        assertTrue(CodeHighlighter.supports("css"))
+        assertTrue(CodeHighlighter.supports("yaml"))
+    }
+
+    @Test
+    fun javaCodeIsHighlightedAndLossless() {
+        val code = "public class A { // note\u000A    int x = 1;\u000A}"
+        val tokens = CodeHighlighter.tokenize(code, "java")
+        assertEquals(code, tokens.joinToString("") { it.text })
+        assertTrue(tokens.any { it.kind == TokenKind.KEYWORD })
+        assertTrue(tokens.any { it.kind == TokenKind.COMMENT })
+    }
+
+    @Test
+    fun goCodeIsHighlightedAndLossless() {
+        val code = "func main() {\u000A\tfmt.Println(\"hi\")\u000A}"
+        val tokens = CodeHighlighter.tokenize(code, "go")
+        assertEquals(code, tokens.joinToString("") { it.text })
+        assertTrue(tokens.any { it.kind == TokenKind.KEYWORD })
+        assertTrue(tokens.any { it.kind == TokenKind.STRING })
+    }
+
+    @Test
+    fun unknownLanguageStillLossless() {
+        val code = "whatever ~~~ text"
+        val tokens = CodeHighlighter.tokenize(code, "brainfuck")
+        assertEquals(code, tokens.joinToString("") { it.text })
+    }
 }

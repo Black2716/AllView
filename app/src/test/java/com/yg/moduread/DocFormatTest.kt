@@ -62,4 +62,22 @@ class DocFormatTest {
         assertTrue(DocFormat.ODT.isContainer)
         assertTrue(!DocFormat.TXT.isContainer)
     }
+
+    @Test
+    fun detectsSourceCodeFiles() {
+        assertEquals(DocFormat.CODE, DocFormat.ofExtension("Main.kt"))
+        assertEquals(DocFormat.CODE, DocFormat.ofExtension("a.java"))
+        assertEquals(DocFormat.CODE, DocFormat.ofExtension("run.py"))
+        assertEquals(DocFormat.CODE, DocFormat.ofExtension("app.js"))
+        assertEquals(DocFormat.CODE, DocFormat.ofExtension("x.go"))
+        assertEquals(DocFormat.CODE, DocFormat.ofExtension("y.rs"))
+        assertEquals(DocFormat.CODE, DocFormat.ofExtension("z.cpp"))
+        assertEquals(DocFormat.CODE, DocFormat.ofExtension("s.sh"))
+    }
+
+    @Test
+    fun codeFilesAreNotContainer() {
+        assertTrue(!DocFormat.CODE.isContainer)
+        assertTrue(DocFormat.CODE.supportsSearch)
+    }
 }

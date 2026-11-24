@@ -65,7 +65,7 @@ object DocRepository {
             )
         }
 
-        val parsed: ParsedDoc = runCatching { parseByFormat(format, raw) }
+        val parsed: ParsedDoc = runCatching { parseByFormat(format, raw, name) }
             .getOrElse { e ->
                 // 解析失败时降级为纯文本，保证"至少能读"
                 ParsedDoc(TextAdapters.txt(safeDecode(raw)).blocks, safeDecode(raw))
@@ -83,7 +83,7 @@ object DocRepository {
     }
 
     /** 按格式分派。MARKDOWN 走原有 commonmark 链路，其余走新增适配器。 */
-    private fun parseByFormat(format: DocFormat, raw: ByteArray): ParsedDoc = when (format) {
+    private fun parseByFormat(format: DocFormat, raw: ByteArray, fileName: String? = null): ParsedDoc = when (format) {
         DocFormat.MARKDOWN -> {
             val text = safeDecode(raw)
             ParsedDoc(MdParser.shared.parse(text), text)
@@ -101,6 +101,7 @@ object DocRepository {
         DocFormat.SUBTITLE -> TextAdapters.subtitle(safeDecode(raw))
         DocFormat.RTF -> TextAdapters.rtf(safeDecode(raw))
         DocFormat.XML, DocFormat.HTML -> ContainerAdapters.html(safeDecode(raw))
+        DocFormat.CODE -> TextAdapters.source(safeDecode(raw), fileName)
         DocFormat.EPUB -> ContainerAdapters.epub(raw)
         DocFormat.DOCX -> ContainerAdapters.docx(raw)
         DocFormat.ODT -> ContainerAdapters.odt(raw)

@@ -21,7 +21,14 @@ object CodeHighlighter {
         "kt" to "kotlin", "kts" to "kotlin", "kotlin" to "kotlin",
         "py" to "python", "python3" to "python", "python" to "python",
         "sh" to "bash", "shell" to "bash", "zsh" to "bash", "console" to "bash",
-        "bash" to "bash", "json" to "json", "jsonc" to "json"
+        "bash" to "bash", "json" to "json", "jsonc" to "json",
+        "java" to "java", "js" to "javascript", "jsx" to "javascript",
+        "ts" to "typescript", "tsx" to "typescript", "javascript" to "javascript",
+        "go" to "go", "rs" to "rust", "c" to "c", "h" to "c",
+        "cpp" to "cpp", "cc" to "cpp", "hpp" to "cpp", "csharp" to "csharp", "cs" to "csharp",
+        "rb" to "ruby", "php" to "php", "swift" to "swift", "sql" to "sql",
+        "css" to "css", "scss" to "css", "less" to "css", "yaml" to "yaml", "yml" to "yaml",
+        "xml" to "xml", "html" to "xml", "htm" to "xml", "toml" to "toml"
     )
 
     private val KEYWORDS = mapOf(
@@ -44,7 +51,85 @@ object CodeHighlighter {
             "source", "sudo", "python", "pip", "git", "set", "unset"
         ),
         // JSON 没有关键字，用 true/false/null 充数
-        "json" to setOf("true", "false", "null")
+        "json" to setOf("true", "false", "null"),
+        "java" to setOf(
+            "public", "private", "protected", "class", "interface", "enum", "extends",
+            "implements", "static", "final", "void", "int", "long", "double", "float",
+            "boolean", "char", "byte", "short", "new", "return", "if", "else", "for",
+            "while", "do", "switch", "case", "break", "continue", "try", "catch",
+            "finally", "throw", "throws", "import", "package", "this", "super", "null",
+            "true", "false", "abstract", "synchronized", "volatile", "transient"
+        ),
+        "javascript" to setOf(
+            "function", "const", "let", "var", "class", "extends", "return", "if", "else",
+            "for", "while", "do", "switch", "case", "break", "continue", "try", "catch",
+            "finally", "throw", "new", "this", "super", "import", "export", "default",
+            "async", "await", "yield", "typeof", "instanceof", "null", "undefined",
+            "true", "false", "of", "in", "from"
+        ),
+        "typescript" to setOf(
+            "function", "const", "let", "var", "class", "interface", "type", "enum",
+            "extends", "implements", "return", "if", "else", "for", "while", "switch",
+            "case", "break", "continue", "try", "catch", "finally", "throw", "new",
+            "this", "import", "export", "default", "async", "await", "null", "undefined",
+            "true", "false", "readonly", "public", "private", "protected", "as", "of"
+        ),
+        "go" to setOf(
+            "func", "package", "import", "type", "struct", "interface", "var", "const",
+            "return", "if", "else", "for", "range", "switch", "case", "default", "break",
+            "continue", "go", "defer", "chan", "select", "map", "nil", "true", "false"
+        ),
+        "rust" to setOf(
+            "fn", "let", "mut", "const", "struct", "enum", "impl", "trait", "pub", "use",
+            "mod", "return", "if", "else", "for", "while", "loop", "match", "break",
+            "continue", "self", "Self", "true", "false", "Some", "None", "Ok", "Err"
+        ),
+        "c" to setOf(
+            "int", "char", "float", "double", "void", "long", "short", "unsigned", "signed",
+            "struct", "union", "enum", "typedef", "static", "extern", "const", "return",
+            "if", "else", "for", "while", "do", "switch", "case", "break", "continue",
+            "sizeof", "NULL", "include", "define"
+        ),
+        "cpp" to setOf(
+            "int", "char", "float", "double", "void", "long", "short", "unsigned", "bool",
+            "class", "struct", "namespace", "template", "typename", "public", "private",
+            "protected", "virtual", "override", "const", "static", "return", "if", "else",
+            "for", "while", "do", "switch", "case", "break", "continue", "new", "delete",
+            "nullptr", "true", "false", "using", "auto"
+        ),
+        "csharp" to setOf(
+            "public", "private", "protected", "internal", "class", "struct", "interface",
+            "enum", "namespace", "using", "static", "readonly", "const", "void", "int",
+            "string", "bool", "double", "var", "new", "return", "if", "else", "for",
+            "foreach", "while", "switch", "case", "break", "continue", "try", "catch",
+            "finally", "throw", "this", "base", "null", "true", "false", "async", "await"
+        ),
+        "ruby" to setOf(
+            "def", "class", "module", "end", "if", "elsif", "else", "unless", "while",
+            "until", "for", "do", "return", "yield", "begin", "rescue", "ensure",
+            "raise", "require", "include", "attr_accessor", "nil", "true", "false", "self"
+        ),
+        "php" to setOf(
+            "function", "class", "interface", "trait", "public", "private", "protected",
+            "static", "const", "return", "if", "else", "elseif", "for", "foreach", "while",
+            "switch", "case", "break", "continue", "try", "catch", "finally", "throw",
+            "new", "echo", "namespace", "use", "null", "true", "false"
+        ),
+        "swift" to setOf(
+            "func", "let", "var", "class", "struct", "enum", "protocol", "extension",
+            "import", "return", "if", "else", "for", "while", "switch", "case", "break",
+            "continue", "guard", "defer", "nil", "true", "false", "self", "init"
+        ),
+        "sql" to setOf(
+            "select", "from", "where", "insert", "into", "values", "update", "set",
+            "delete", "create", "table", "drop", "alter", "join", "left", "right",
+            "inner", "outer", "on", "group", "by", "order", "having", "limit", "union",
+            "and", "or", "not", "null", "as", "distinct"
+        ),
+        "css" to setOf("@media", "@import", "important", "inherit", "auto", "none"),
+        "yaml" to setOf("true", "false", "null"),
+        "xml" to setOf("true", "false"),
+        "toml" to setOf("true", "false")
     )
 
     /** 语言是否被支持（决定渲染层要不要走高亮路径）。 */
@@ -58,6 +143,13 @@ object CodeHighlighter {
             "python" -> scan(code, KEYWORDS.getValue(lang), lineComments = listOf("#"), blockComments = false)
             "bash" -> scan(code, KEYWORDS.getValue(lang), lineComments = listOf("#"), blockComments = false)
             "json" -> scan(code, KEYWORDS.getValue(lang), lineComments = emptyList(), blockComments = false, quoteChar = '"')
+            // C 系语言：// 行注释 + 块注释
+            "java", "javascript", "typescript", "go", "rust", "c", "cpp", "csharp", "swift",
+            "php" -> scan(code, KEYWORDS.getValue(lang), lineComments = listOf("//", "#"), blockComments = true)
+            "sql" -> scan(code, KEYWORDS.getValue(lang), lineComments = listOf("--"), blockComments = true)
+            "ruby" -> scan(code, KEYWORDS.getValue(lang), lineComments = listOf("#"), blockComments = false)
+            "css", "yaml", "toml" -> scan(code, KEYWORDS.getValue(lang), lineComments = listOf("#"), blockComments = false)
+            "xml" -> scan(code, KEYWORDS.getValue(lang), lineComments = emptyList(), blockComments = true)
             else -> plain(code)
         }
     }

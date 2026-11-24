@@ -105,4 +105,30 @@ class TextAdaptersTest {
         assertEquals(3, doc.blocks.size)
         assertTrue(doc.blocks.all { it is MdBlock.CodeBlock })
     }
+
+    @Test
+    fun sourceBecomesSingleHighlightedBlock() {
+        val code = "fun main() {\u000A    println(1)\u000A}"
+        val doc = TextAdapters.source(code, "Main.kt")
+        assertEquals(1, doc.blocks.size)
+        val block = doc.blocks.single() as MdBlock.CodeBlock
+        assertEquals("kotlin", block.language)
+        assertTrue(block.code.contains("fun main"))
+    }
+
+    @Test
+    fun sourceLanguageFollowsExtension() {
+        assertEquals("kotlin", TextAdapters.languageOfFile("A.kt"))
+        assertEquals("python", TextAdapters.languageOfFile("b.py"))
+        assertEquals("bash", TextAdapters.languageOfFile("c.sh"))
+        assertEquals("json", TextAdapters.languageOfFile("d.json"))
+        // 没有词法表的语言返回 null，走纯文本而不是用错的关键字表
+        assertEquals(null, TextAdapters.languageOfFile("e.go"))
+        assertEquals(null, TextAdapters.languageOfFile(null))
+    }
+
+    @Test
+    fun emptySourceYieldsNoBlocks() {
+        assertTrue(TextAdapters.source("   ", "a.kt").blocks.isEmpty())
+    }
 }
