@@ -111,6 +111,9 @@ fun MdBlock.searchableText(): String = when (this) {
     }
     is MdBlock.Image -> alt
     is MdBlock.Rule -> ""
+    // 内嵌图片与 PDF 页没有可搜索文字：前者是二进制，后者文字层单独提取
+    is MdBlock.EmbeddedImage -> alt
+    is MdBlock.PdfPage -> ""
 }
 /**
  * 书签摘要：取块纯文本前 40 字并压平空白。

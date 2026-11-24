@@ -20,6 +20,14 @@ data class DocumentState(
     val anchors: Map<String, Int> = emptyMap(),
     /** 全文搜索索引，解析完成时建一次。 */
     val searchIndex: com.yg.moduread.md.SearchIndex? = null,
+    /** 文档格式。界面据此隐藏搜索入口、显示限制提示。 */
+    val format: com.yg.moduread.format.DocFormat = com.yg.moduread.format.DocFormat.MARKDOWN,
+    /** PDF 页数；非 PDF 为 0。 */
+    val pageCount: Int = 0,
+    /** PDF 是否加密（加密文件无目录、无文字层）。 */
+    val encrypted: Boolean = false,
+    /** 文字层是否可用（扫描件为 false，搜索应提示不可用）。 */
+    val hasTextLayer: Boolean = true,
     val loading: Boolean = false,
     val error: String? = null
 )

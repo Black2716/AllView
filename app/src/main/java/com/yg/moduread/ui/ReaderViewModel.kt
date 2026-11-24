@@ -200,6 +200,10 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                                 toc = toc,
                                 anchors = MdToc.index(toc),
                                 searchIndex = SearchIndex.build(loaded.blocks),
+                                format = loaded.format,
+                                pageCount = loaded.pageCount,
+                                encrypted = loaded.encrypted,
+                                hasTextLayer = loaded.hasTextLayer,
                                 loading = false
                             )
                         )

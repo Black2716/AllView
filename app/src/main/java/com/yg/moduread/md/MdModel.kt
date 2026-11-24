@@ -42,5 +42,31 @@ sealed interface MdBlock {
     data class Math(val latex: String, val display: Boolean) : MdBlock
 
     data class Image(val url: String, val alt: String) : MdBlock
+
+    /**
+     * 容器内嵌图片（EPUB / DOCX / ODT）。
+     *
+     * 与 [Image] 的区别：那些图片是「文档同目录的外部文件」，走 SAF 解析路径；
+     * 这里的字节直接在 ZIP 包里，解析时就已读进内存，渲染时用 BitmapFactory 解码即可，
+     * 不落盘、不走 MdImageResolver。
+     *
+     * [bytes] 为原始压缩内容解码后的图片字节。equals 用引用比较（data class 的
+     * ByteArray 语义），实际不会被当作集合键使用。
+     */
+    data class EmbeddedImage(val bytes: ByteArray, val alt: String) : MdBlock {
+        override fun equals(other: Any?): Boolean =
+            this === other || (other is EmbeddedImage && alt == other.alt && bytes === other.bytes)
+
+        override fun hashCode(): Int = 31 * System.identityHashCode(bytes) + alt.hashCode()
+    }
+
+    /**
+     * PDF 的一页。
+     *
+     * PdfRenderer 只能把页渲染成位图，不能给文字，所以页内容由界面层按需渲染。
+     * 页码是 0 基，与 PdfRenderer 一致。
+     */
+    data class PdfPage(val pageIndex: Int, val widthPoints: Int, val heightPoints: Int) : MdBlock
+
     data object Rule : MdBlock
 }

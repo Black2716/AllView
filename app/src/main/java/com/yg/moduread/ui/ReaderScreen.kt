@@ -247,6 +247,7 @@ fun ReaderScreen(
                     onOpenSettings = onOpenSettings,
                     onOpenToc = onOpenToc,
                     onOpenSearch = onOpenSearch,
+                    searchEnabled = doc.format.supportsSearch && doc.hasTextLayer,
                     onOpenBookmarks = onOpenBookmarks,
                     onPickFile = onPickFile,
                     bottomPadding = bottomInsets,
@@ -353,6 +354,7 @@ private fun ReaderBottomBar(
     onOpenSettings: () -> Unit,
     onOpenToc: () -> Unit,
     onOpenSearch: () -> Unit,
+    searchEnabled: Boolean = true,
     onOpenBookmarks: () -> Unit,
     onPickFile: () -> Unit,
     bottomPadding: androidx.compose.ui.unit.Dp,
@@ -382,10 +384,12 @@ private fun ReaderBottomBar(
                 modifier = Modifier.weight(1f),
                 draw = { tint -> MiIcons.Toc(tint) }
             )
+            // PDF 与无文字层的扫描件没有搜索索引，入口置灰而不是静默失效
             BarIcon(
                 label = "搜索",
-                onClick = onOpenSearch,
+                onClick = { if (searchEnabled) onOpenSearch() },
                 modifier = Modifier.weight(1f),
+                dimmed = !searchEnabled,
                 draw = { tint -> MiIcons.Search(tint) }
             )
             BarIcon(
@@ -436,10 +440,15 @@ private fun BarIcon(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     active: Boolean = false,
+    /** 置灰：功能当前不可用（如 PDF 无搜索索引）。 */
+    dimmed: Boolean = false,
     draw: @Composable (Color) -> Unit
 ) {
-    val tint = if (active) MaterialTheme.colorScheme.primary
-    else MaterialTheme.colorScheme.onSurfaceVariant
+    val tint = when {
+        dimmed -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+        active -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Box(
         modifier
             .height(MinTouchTarget)
@@ -542,7 +551,7 @@ private fun EmptyView(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "墨读",
+            text = "AllView",
             fontSize = 30.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground

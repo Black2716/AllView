@@ -1,5 +1,6 @@
 package com.yg.moduread.ui
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.foundation.Image
@@ -8,6 +9,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -105,6 +107,8 @@ fun MdBlockView(
         )
 
         is MdBlock.Image -> ImageView(block, modifier, docUri)
+        is MdBlock.EmbeddedImage -> EmbeddedImageView(block, modifier)
+        is MdBlock.PdfPage -> PdfPageSlot(block, docUri, modifier)
         is MdBlock.Rule -> RuleLine(modifier)
     }
 }
@@ -658,5 +662,85 @@ private fun AnnotatedString.Builder.appendInlines(
 
             MdInline.Break -> append("\n")
         }
+    }
+}
+
+/**
+ * 内嵌图片（EPUB / DOCX / ODT 包里解出的字节）。
+ *
+ * 不走 MdImageResolver 的 SAF 路径 —— 那些是「文档同目录的外部图片」；
+ * 这里的字节已经在内存里，直接 BitmapFactory 解码即可。
+ *
+ * 解码用 remember(bytes) 缓存，避免每次重组都重新解一遍（大图会很贵）。
+ */
+@Composable
+private fun EmbeddedImageView(block: MdBlock.EmbeddedImage, modifier: Modifier) {
+    val bitmap = remember(block.bytes) { decodeBitmap(block.bytes) }
+    if (bitmap == null) {
+        // 解不出来也给出明确提示，而不是留白
+        Box(
+            modifier
+                .fillMaxWidth()
+                .clip(Shapes.card)
+                .background(MaterialTheme.colorScheme.surfaceContainer)
+                .padding(Sp.m)
+        ) {
+            Text(
+                text = "图片无法解码" + if (block.alt.isBlank()) "" else "：" + block.alt,
+                fontSize = Type.label,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+    Column(modifier.fillMaxWidth().padding(bottom = Sp.s)) {
+        Image(
+            bitmap = bitmap.asImageBitmap(),
+            contentDescription = block.alt.ifBlank { null },
+            contentScale = ContentScale.FillWidth,
+            modifier = Modifier.fillMaxWidth().clip(Shapes.card)
+        )
+        if (block.alt.isNotBlank()) {
+            Text(
+                text = block.alt,
+                fontSize = Type.label,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(top = Sp.s)
+            )
+        }
+    }
+}
+
+/** GIF/WebP/超大图都可能解不出来，统一返回 null 由调用方降级。 */
+private fun decodeBitmap(bytes: ByteArray): Bitmap? = runCatching {
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+}.getOrNull()
+
+/**
+ * PDF 页占位。
+ *
+ * 真正的位图由 PdfPageView 的调用方（ReaderScreen 里的 PdfPageSlot）
+ * 通过 PdfRenderer 按需渲染 —— PdfRenderer 非线程安全且必须 close，
+ * 不适合放在纯渲染函数里创建。这里只画一个占位框，保证块本身可测量。
+ */
+@Composable
+private fun PdfPageView(block: MdBlock.PdfPage, modifier: Modifier) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .aspectRatio(
+                if (block.heightPoints > 0) block.widthPoints.toFloat() / block.heightPoints.toFloat()
+                else 0.707f  // A4 近似，防止除零
+            )
+            .clip(Shapes.card)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+    ) {
+        Text(
+            text = "第 " + (block.pageIndex + 1) + " 页",
+            fontSize = Type.label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.Center)
+        )
     }
 }

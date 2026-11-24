@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yg.moduread.data.MdDocResolver
+import com.yg.moduread.format.DocFormat
 import com.yg.moduread.md.MdBlock
 import com.yg.moduread.md.plainText
 
@@ -77,9 +78,8 @@ fun ReaderRoot(vm: ReaderViewModel) {
     }
 
     val openPicker: () -> Unit = {
-        picker.launch(
-            arrayOf("text/markdown", "text/x-markdown", "text/plain", "application/octet-stream")
-        )
+        // 用格式表里的完整 MIME 列表，否则非 .md 文件在选择器里会被置灰
+        picker.launch(DocFormat.pickerMimeTypes)
     }
 
     Surface(color = MaterialTheme.colorScheme.background) {
@@ -130,9 +130,7 @@ fun ReaderRoot(vm: ReaderViewModel) {
                                 // 分区存储下未被授权过的兄弟文档读不到（平台限制）。
                                 // 回退到 SAF：用户选一次即拿到持久授权，之后再点就直接打开。
                                 pendingDocLink.value = url
-                                picker.launch(
-                                    arrayOf("text/markdown", "text/x-markdown", "text/plain", "application/octet-stream")
-                                )
+                                picker.launch(DocFormat.pickerMimeTypes)
                             }
                         }
                         // 3) 其余交给系统浏览器
@@ -220,6 +218,8 @@ fun MdBlock.keyHint(): String = when (this) {
         }
     } ?: "")
     is MdBlock.Rule -> "r"
+    is MdBlock.EmbeddedImage -> "eb:" + alt.take(16)
+    is MdBlock.PdfPage -> "pg:" + pageIndex
 }
 
 /** 小工具：标题文本（首个一级标题优先，其次文件名）。 */
