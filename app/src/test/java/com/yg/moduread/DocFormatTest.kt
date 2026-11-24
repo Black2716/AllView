@@ -50,9 +50,19 @@ class DocFormatTest {
     }
 
     @Test
-    fun fallsBackToMarkdownWhenNothingKnown() {
-        assertEquals(DocFormat.MARKDOWN, DocFormat.detect(null, null))
-        assertEquals(DocFormat.MARKDOWN, DocFormat.detect("weird.zzz", null))
+    fun fallsBackToUnsupportedWhenNothingKnown() {
+        // 曾经兜底成 MARKDOWN，导致二进制文件被当文本读而崩溃（.mobi 实测闪退）。
+        // 现在兜底为 UNSUPPORTED，只显示提示。
+        // 注意：没有扩展名也没有 MIME 时，仍按 Markdown 处理（老用户拖入无扩展名 .md 的场景）。
+        assertEquals(DocFormat.UNSUPPORTED, DocFormat.detect("weird.zzz", null))
+        assertEquals(DocFormat.UNSUPPORTED, DocFormat.detect("a.mobi", null))
+    }
+
+    @Test
+    fun nullNameAndMimeIsUnsupported() {
+        // null + null 无法判断类型，一律视为不支持并给出提示。
+        // 不猜成 Markdown：猜错会把二进制当文本读而崩溃。
+        assertEquals(DocFormat.UNSUPPORTED, DocFormat.detect(null, null))
     }
 
     @Test
@@ -79,5 +89,12 @@ class DocFormatTest {
     fun codeFilesAreNotContainer() {
         assertTrue(!DocFormat.CODE.isContainer)
         assertTrue(DocFormat.CODE.supportsSearch)
+    }
+
+    @Test
+    fun detectsXlsx() {
+        assertEquals(DocFormat.XLSX, DocFormat.ofExtension("book.xlsx"))
+        assertEquals(DocFormat.XLSX, DocFormat.ofExtension("A.XLSM"))
+        assertTrue(DocFormat.XLSX.isContainer)
     }
 }

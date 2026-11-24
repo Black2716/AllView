@@ -33,6 +33,8 @@ fun ReaderRoot(vm: ReaderViewModel) {
     val recent by vm.recent.collectAsStateWithLifecycle()
     val bookmarks by vm.bookmarks.collectAsStateWithLifecycle()
     var tocVisible by remember { mutableStateOf(false) }
+    // PDF 全屏查看：状态提到界面根部，用普通 Box 叠加而不是 Popup/Dialog
+    var pdfViewer by remember { mutableStateOf<Pair<android.graphics.Bitmap, String>?>(null) }
     var searchVisible by remember { mutableStateOf(false) }
     var bookmarksVisible by remember { mutableStateOf(false) }
     // 相对路径打不开时记下想去的文档，等用户在 SAF 里选完再核对
@@ -60,6 +62,9 @@ fun ReaderRoot(vm: ReaderViewModel) {
     ) { }
 
     val picker = rememberLauncherForActivityResult(
+        // 必须用 OpenDocument 而不是 GetContent：只有前者能拿到「持久授权」，
+        // GetContent 只给一次性读权限，重启后已打开的文档会变成「未授权」。
+        // MIME 传 */* 放开过滤，否则系统识别不出 MIME 的文件（CSV/.c/.cpp）会被置灰。
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) vm.open(uri)
@@ -78,8 +83,9 @@ fun ReaderRoot(vm: ReaderViewModel) {
     }
 
     val openPicker: () -> Unit = {
-        // 用格式表里的完整 MIME 列表，否则非 .md 文件在选择器里会被置灰
-        picker.launch(DocFormat.pickerMimeTypes)
+        // OpenDocument 收的是 MIME 数组。用 */* + 各具体类型，兼顾「不过滤」与
+        // 让系统把已知类型排在前面；实际格式仍由扩展名判定（DocFormat.detect）。
+        picker.launch(arrayOf("*/*"))
     }
 
     Surface(color = MaterialTheme.colorScheme.background) {
@@ -117,6 +123,7 @@ fun ReaderRoot(vm: ReaderViewModel) {
                 onOpenSearch = { searchVisible = true },
                 onOpenBookmarks = { bookmarksVisible = true },
                 onLongPressBlock = { blockIndex -> vm.addBookmark(blockIndex) },
+                onOpenPdfViewer = { bitmap, pageLabel -> pdfViewer = bitmap to pageLabel },
                 onLink = { url ->
                     when {
                         // 1) 文档内锚点
@@ -130,7 +137,7 @@ fun ReaderRoot(vm: ReaderViewModel) {
                                 // 分区存储下未被授权过的兄弟文档读不到（平台限制）。
                                 // 回退到 SAF：用户选一次即拿到持久授权，之后再点就直接打开。
                                 pendingDocLink.value = url
-                                picker.launch(DocFormat.pickerMimeTypes)
+                                picker.launch(arrayOf("*/*"))
                             }
                         }
                         // 3) 其余交给系统浏览器
@@ -149,6 +156,16 @@ fun ReaderRoot(vm: ReaderViewModel) {
                 recent = recent,
                 onOpenRecent = { uri -> runCatching { Uri.parse(uri) }.getOrNull()?.let(vm::open) },
                 onForgetRecent = vm::forgetRecent
+            )
+        }
+
+        // PDF 全屏查看器：普通 Box 叠加在主界面之上，尺寸天然铺满，
+        // 不涉及 Popup/Dialog 的窗口尺寸与事件分发问题。
+        pdfViewer?.let { (bmp, pageLabel) ->
+            PdfFullscreenOverlay(
+                bitmap = bmp,
+                label = pageLabel,
+                onDismiss = { pdfViewer = null }
             )
         }
 

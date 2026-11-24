@@ -204,6 +204,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                                 pageCount = loaded.pageCount,
                                 encrypted = loaded.encrypted,
                                 hasTextLayer = loaded.hasTextLayer,
+                            html = loaded.html,
                                 loading = false
                             )
                         )
@@ -220,8 +221,26 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 persistSessionUris()
             }.onFailure { e ->
-                updateDoc {
-                    it.copy(loading = false, error = if (silent) null else friendlyError(e))
+                if (silent) {
+                    // 恢复会话时失败（文件被删/授权失效）：直接丢掉这个会话，
+                    // 不留「未命名」空标签 —— 否则重启几次会攒出一排空 tab。
+                    _sessions.update { list -> list.filterNot { it.id == id } }
+                    if (_activeId.value == id) _activeId.value = _sessions.value.lastOrNull()?.id
+                    persistSessionUris()
+                } else {
+                    // 用户主动打开失败：保留标签并显示原因，让用户看到「未被授权」这类提示。
+                    // 标题取 URI 末段（可能是乱码 id），至少比「未命名」有辨识度。
+                    val fallbackTitle = uri.lastPathSegment
+                        ?.substringAfterLast('/')
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "打开失败"
+                    updateDoc {
+                        it.copy(
+                            title = if (it.title.isBlank()) fallbackTitle else it.title,
+                            loading = false,
+                            error = friendlyError(e)
+                        )
+                    }
                 }
             }
         }

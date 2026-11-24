@@ -93,9 +93,14 @@ class SampleFormatsTest {
     @Test
     fun parsesRealPdfSample() {
         val bytes = sample("doc.pdf") ?: return
-        val info = PdfAdapter.inspect(bytes)
-        assertEquals(2, info.pageCount)
-        assertTrue(info.outline.isNotEmpty())
-        assertTrue(info.hasTextLayer)
+        // 默认不提取文字层（打开文档只需页数与目录，提取太慢）
+        val quick = PdfAdapter.inspect(bytes)
+        assertEquals(2, quick.pageCount)
+        assertTrue(quick.outline.isNotEmpty())
+        assertTrue("默认应跳过文字提取", !quick.hasTextLayer)
+
+        // 显式请求时才做全文提取
+        val full = PdfAdapter.inspect(bytes, withText = true)
+        assertTrue("显式请求后应有文字层", full.hasTextLayer)
     }
 }

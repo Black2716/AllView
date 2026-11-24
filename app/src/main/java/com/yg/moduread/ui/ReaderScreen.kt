@@ -58,7 +58,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.yg.moduread.format.DocFormat
 import com.yg.moduread.md.MdBlock
+import com.yg.moduread.md.plainText
 
 @OptIn(FlowPreview::class)
 @Composable
@@ -76,6 +78,8 @@ fun ReaderScreen(
     onOpenBookmarks: () -> Unit = {},
     /** 长按某块正文（用于加书签）。参数是块索引。 */
     onLongPressBlock: (Int) -> Unit = {},
+    /** PDF 页点击回调：把位图交给上层全屏查看。 */
+    onOpenPdfViewer: (android.graphics.Bitmap, String) -> Unit = { _, _ -> },
     /** 所有链接点击（锚点、相对路径、外部 URL）。 */
     onLink: (String) -> Unit = {},
     /** 最近打开过的文件，空态页列出；点一项直接打开。 */
@@ -113,6 +117,22 @@ fun ReaderScreen(
         derivedStateOf {
             if (body.isEmpty()) 0f
             else (listState.firstVisibleItemIndex.toFloat() / body.size.toFloat()).coerceIn(0f, 1f)
+        }
+    }
+
+    // 顶栏标题跟随当前章节，而不是固定显示首个标题。
+    //
+    // 取「起始块不晚于当前可见块」的最后一个标题 —— 与目录抽屉的高亮规则一致。
+    // 用 exact 相等匹配会在正文停在表格/代码块时失效（历史上踩过这个坑）。
+    // 列表 0 号是页首大标题项，所以可见块下标要减 1 才是 body 下标。
+    val currentTitle by remember(doc.docUri, body) {
+        derivedStateOf {
+            val index = listState.firstVisibleItemIndex - 1
+            if (index < 0) return@derivedStateOf body.displayTitle(doc.title)
+            val heading = body.subList(0, (index + 1).coerceAtMost(body.size))
+                .lastOrNull { it is MdBlock.Heading } as? MdBlock.Heading
+            heading?.let { it.content.plainText().trim().takeIf { t -> t.isNotEmpty() } }
+                ?: body.displayTitle(doc.title)
         }
     }
 
@@ -176,6 +196,38 @@ fun ReaderScreen(
                 onOpenRecent = onOpenRecent,
                 onForgetRecent = onForgetRecent
             )
+            // DOCX 且成功生成 HTML：交给 WebView。
+            // 表格跨页、图片环绕、列表缩进由浏览器排版引擎处理，
+            // 比自己用 Compose 复现准确得多；分页也由页面内脚本完成。
+            doc.html != null -> {
+                DocxWebView(html = doc.html, modifier = Modifier.fillMaxSize())
+            }
+            // ODT 与「HTML 生成失败」的 DOCX 退回自绘整页视图。
+            doc.format == DocFormat.DOCX || doc.format == DocFormat.ODT -> {
+                androidx.compose.foundation.lazy.LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = 12.dp,
+                        end = 12.dp,
+                        top = 56.dp,
+                        bottom = 96.dp + insets.calculateBottomPadding()
+                    )
+                ) {
+                    item(key = "title") {
+                        DocTitle(doc = doc, fontSize = prefs.fontSizeSp)
+                    }
+                    item(key = "pages") {
+                        PagedDocView(
+                            blocks = body,
+                            fontSizeSp = prefs.fontSizeSp,
+                            docUri = doc.docUri,
+                            onAnchor = onLink,
+                            onOpenPdfViewer = onOpenPdfViewer
+                        )
+                    }
+                }
+            }
             else -> {
                 LazyColumn(
                     state = listState,
@@ -202,7 +254,8 @@ fun ReaderScreen(
                                 docUri = doc.docUri,
                                 onAnchor = onLink,
                                 // 块索引要加 1：body 是 blocks.drop(1)，而书签按原始块下标存
-                                onLongPress = { onLongPressBlock(index + 1) }
+                                onLongPress = { onLongPressBlock(index + 1) },
+                                onOpenPdfViewer = onOpenPdfViewer
                             )
                         }
                     }
@@ -217,7 +270,7 @@ fun ReaderScreen(
                 )
                 if (topBarAlpha > 0.01f) {
                     TopBar(
-                        title = body.displayTitle(doc.title),
+                        title = currentTitle,
                         progress = progress,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
@@ -558,7 +611,7 @@ private fun EmptyView(
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            text = error ?: "打开一个本地 .md 文件开始阅读",
+            text = error ?: "打开本地文件开始阅读",
             fontSize = 14.sp,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant

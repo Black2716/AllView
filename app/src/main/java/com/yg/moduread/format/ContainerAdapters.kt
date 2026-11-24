@@ -141,6 +141,17 @@ object ContainerAdapters {
         images: MutableMap<String, ByteArray>
     ) {
         val children = node.childNodes
+        // 收集连续的列表项：Word 里每个列表项是独立的 w:p（带 w:numPr），
+        // 必须先把连续的攒起来才能输出成一个 ListBlock，否则会散成一堆段落。
+        val pendingItems = ArrayList<List<MdBlock>>()
+        var pendingOrdered = false
+
+        fun flushList() {
+            if (pendingItems.isEmpty()) return
+            out.add(MdBlock.ListBlock(pendingOrdered, 1, true, ArrayList(pendingItems)))
+            pendingItems.clear()
+        }
+
         for (i in 0 until children.length) {
             val child = children.item(i)
             if (child.nodeType != Node.ELEMENT_NODE) continue
@@ -149,14 +160,33 @@ object ContainerAdapters {
             when (tag) {
                 "p" -> {
                     val text = collectText(el).trim()
-                    if (text.isNotEmpty()) {
-                        val style = styleOf(el)
-                        val level = headingLevelOf(style)
-                        if (level > 0) out.add(MdBlock.Heading(level, listOf(MdInline.Text(text))))
-                        else out.add(MdBlock.Para(listOf(MdInline.Text(text))))
+                    val listInfo = listInfoOf(el)
+                    // 图片在 Word 里是嵌在段落内部的（w:p > w:r > w:drawing > a:blip），
+                    // 只在外层 when 里认 "blip" 永远走不到 —— 那些含图的段落会被
+                    // 当成纯文本段落，图片直接丢失。
+                    // 所以段落里必须主动往下找图片。
+                    val paraImages = collectParagraphImages(el, zip, images)
+                    if (listInfo != null) {
+                        // 列表项：攒进 pendingItems，等连续项结束再一起输出
+                        if (pendingItems.isEmpty()) pendingOrdered = listInfo.second
+                        if (text.isNotEmpty()) {
+                            pendingItems.add(listOf(MdBlock.Para(listOf(MdInline.Text(text)))))
+                        }
+                    } else {
+                        flushList()
+                        if (text.isNotEmpty()) {
+                            val level = headingLevelOf(styleOf(el))
+                            if (level > 0) out.add(MdBlock.Heading(level, listOf(MdInline.Text(text))))
+                            else out.add(MdBlock.Para(listOf(MdInline.Text(text))))
+                        }
+                        // 段落文字之后跟图片，保持原始阅读顺序
+                        for (img in paraImages) {
+                            out.add(MdBlock.EmbeddedImage(img, ""))
+                        }
                     }
                 }
                 "tbl" -> {
+                    flushList()
                     val rows = collectTableRows(el)
                     if (rows.isNotEmpty()) out.add(ContainerSupport.tableFrom(rows))
                 }
@@ -167,6 +197,7 @@ object ContainerAdapters {
                         val data = zip.get(target)
                         if (data != null) {
                             images[target] = data
+                            flushList()
                             out.add(MdBlock.EmbeddedImage(data, ""))
                         }
                     }
@@ -174,6 +205,65 @@ object ContainerAdapters {
                 else -> walkDocx(el, out, zip, images)
             }
         }
+        flushList()
+    }
+
+    /**
+     * 判断段落是否是列表项，并返回 (层级, 是否有序)。
+     *
+     * Word 用 w:numPr/w:numId 表示列表；numId 具体是否有序要看 numbering.xml，
+     * 这里不解析那个文件（成本高、收益低），用 w:ilvl + 经验值近似：
+     * 绝大多数实际文档里项目符号列表远多于编号列表，因此默认无序。
+     */
+    private fun listInfoOf(p: Element): Pair<Int, Boolean>? {
+        val numPr = p.getElementsByTagName("w:numPr")
+        if (numPr.length == 0) return null
+        val ilvl = p.getElementsByTagName("w:ilvl")
+        val level = if (ilvl.length > 0) {
+            val e = ilvl.item(0) as? Element
+            (e?.getAttribute("w:val")?.toIntOrNull() ?: 0)
+        } else 0
+        return level to false
+    }
+    /**
+     * 收集一个段落内的所有内嵌图片，按文档顺序。
+     *
+     * Word 的图片位置是 w:p → w:r → w:drawing → a:blip（或旧的 v:imagedata）。
+     * 这几种都要认，否则「有些 docx 带图片」的图片会静默丢失。
+     */
+    private fun collectParagraphImages(
+        p: Element,
+        zip: ContainerSupport.ZipBundle,
+        images: MutableMap<String, ByteArray>
+    ): List<ByteArray> {
+        val result = ArrayList<ByteArray>()
+        // a:blip 用 r:embed；老格式 v:imagedata 用 r:id
+        val blips = p.getElementsByTagName("a:blip")
+        for (i in 0 until blips.length) {
+            val el = blips.item(i) as? Element ?: continue
+            val rid = el.getAttribute("r:embed").ifEmpty { el.getAttribute("embed") }
+            loadImage(rid, zip, images)?.let { result.add(it) }
+        }
+        val legacy = p.getElementsByTagName("v:imagedata")
+        for (i in 0 until legacy.length) {
+            val el = legacy.item(i) as? Element ?: continue
+            val rid = el.getAttribute("r:id").ifEmpty { el.getAttribute("id") }
+            loadImage(rid, zip, images)?.let { result.add(it) }
+        }
+        return result
+    }
+
+    /** 按关系 id 取出图片字节；读不到返回 null。 */
+    private fun loadImage(
+        rid: String,
+        zip: ContainerSupport.ZipBundle,
+        images: MutableMap<String, ByteArray>
+    ): ByteArray? {
+        if (rid.isBlank()) return null
+        val target = docxImagePath(zip, rid) ?: return null
+        val data = zip.get(target) ?: return null
+        images[target] = data
+        return data
     }
 
     private fun collectText(el: Element): String {
@@ -198,20 +288,59 @@ object ContainerAdapters {
         return ""
     }
 
+    /**
+     * 收集表格行。
+     *
+     * 三处必须用「直接子元素」而不能用 getElementsByTagName：
+     *  - w:tr：嵌套表格的行会被父表重复计入，行数翻倍
+     *  - w:tc：嵌套表格的单元格会被算进外层行，列数错乱
+     *  - w:t：同理，单元格文字会串
+     *
+     * 另外处理合并单元格：w:gridSpan 表示横跨 n 列，
+     * 必须补 n-1 个空占位，否则该行短一截、后续列整体左移。
+     */
     private fun collectTableRows(tbl: Element): List<List<String>> {
         val rows = ArrayList<List<String>>()
-        val trs = tbl.getElementsByTagName("w:tr")
-        for (i in 0 until trs.length) {
-            val tr = trs.item(i) as? Element ?: continue
+        for (tr in directChildren(tbl, "tr")) {
             val cells = ArrayList<String>()
-            val tcs = tr.getElementsByTagName("w:tc")
-            for (j in 0 until tcs.length) {
-                val tc = tcs.item(j) as? Element ?: continue
-                cells.add(collectText(tc).trim())
+            for (tc in directChildren(tr, "tc")) {
+                val text = collectText(tc).trim()
+                cells.add(text)
+                // 横向合并：补占位保持列数一致
+                val span = gridSpanOf(tc)
+                for (k in 1 until span) cells.add("")
             }
             if (cells.isNotEmpty()) rows.add(cells)
         }
-        return rows
+        // 统一成最大列数，缺失的尾部补空 —— 上下行必须等宽才能对齐
+        val width = rows.maxOfOrNull { it.size } ?: 0
+        return rows.map { r ->
+            if (r.size == width) r else r + List(width - r.size) { "" }
+        }
+    }
+
+    /** w:gridSpan 的值，默认 1。 */
+    private fun gridSpanOf(tc: Element): Int {
+        val spans = tc.getElementsByTagName("w:gridSpan")
+        if (spans.length == 0) return 1
+        val el = spans.item(0) as? Element ?: return 1
+        val v = el.getAttribute("w:val").ifEmpty { el.getAttribute("val") }
+        return v.toIntOrNull()?.coerceIn(1, 50) ?: 1
+    }
+
+    /**
+     * 取直接子元素（按本地名，忽略命名空间前缀）。
+     */
+    private fun directChildren(parent: Element, localName: String): List<Element> {
+        val out = ArrayList<Element>()
+        val kids = parent.childNodes
+        for (i in 0 until kids.length) {
+            val n = kids.item(i)
+            if (n.nodeType != Node.ELEMENT_NODE) continue
+            val e = n as Element
+            if (e.tagName.lowercase().substringAfter(':') == localName) out.add(e)
+        }
+        return out
     }
 
     fun headingLevelOf(style: String): Int {
@@ -278,6 +407,11 @@ object ContainerAdapters {
                 "p" -> {
                     val text = (el.textContent ?: "").trim()
                     if (text.isNotEmpty()) out.add(MdBlock.Para(listOf(MdInline.Text(text))))
+                    // 与 DOCX 同理：draw:image 嵌在 draw:frame 里、frame 又在段落内，
+                    // 只在顶层认 "image" 永远走不到，含图段落会丢图。
+                    for (img in collectOdtImages(el, zip, images)) {
+                        out.add(MdBlock.EmbeddedImage(img, ""))
+                    }
                 }
                 "image" -> {
                     val href = el.getAttribute("xlink:href").ifEmpty { el.getAttribute("href") }
@@ -291,6 +425,26 @@ object ContainerAdapters {
                 else -> walkOdt(el, out, zip, images)
             }
         }
+    }
+
+    /** 收集 ODT 段落内所有 draw:image，按文档顺序。 */
+    private fun collectOdtImages(
+        p: Element,
+        zip: ContainerSupport.ZipBundle,
+        images: MutableMap<String, ByteArray>
+    ): List<ByteArray> {
+        val result = ArrayList<ByteArray>()
+        val els = p.getElementsByTagName("draw:image")
+        for (i in 0 until els.length) {
+            val el = els.item(i) as? Element ?: continue
+            val href = el.getAttribute("xlink:href").ifEmpty { el.getAttribute("href") }
+            val path = ContainerSupport.normalizePath(href)
+            if (path.isEmpty()) continue
+            val data = zip.get(path) ?: continue
+            images[path] = data
+            result.add(data)
+        }
+        return result
     }
 
     // ── HTML ─────────────────────────────────────────────────────

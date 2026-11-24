@@ -23,12 +23,24 @@ enum class DocFormat {
     ODT,
     HTML,
     /** 源码文件：按扩展名挑语言做语法高亮。 */
+    /** Excel 表格：读 sharedStrings + sheet XML 转成表格块。 */
+    XLSX,
+    /** Office 97-2003 二进制格式，暂不支持解析。 */
+    DOC_LEGACY,
+    /**
+     * 未知/不支持的格式。
+     *
+     * 以前 detect() 会兜底成 MARKDOWN —— 后果是任何二进制文件（如 .mobi）
+     * 都被按 UTF-8 当文本读，解析器吞下海量无效内容后直接崩。
+     * 现在兜底到这里，只显示一句明确提示。
+     */
+    UNSUPPORTED,
     CODE,
     PDF;
 
     /** 是否由 ZIP + XML 容器解析（需要读包内图片）。 */
     val isContainer: Boolean
-        get() = this == EPUB || this == DOCX || this == ODT
+        get() = this == EPUB || this == DOCX || this == ODT || this == XLSX
 
     /** 是否支持全文搜索（PDF 走文字层提取，可能部分失败）。 */
     val supportsSearch: Boolean
@@ -56,6 +68,10 @@ enum class DocFormat {
                 "rtf" -> RTF
                 "epub" -> EPUB
                 "docx" -> DOCX
+                // .doc 是 97-2003 的二进制复合文档，与 .docx（ZIP+XML）完全不同。
+                // 之前没有这个分支，会回退到 MARKDOWN 按文本读二进制 —— 界面直接是乱码。
+                // 这里单独标记，交给上层给出明确提示。
+                "doc" -> DOC_LEGACY
                 "odt" -> ODT
                 "html", "htm" -> HTML
                 "kt", "kts", "java", "py", "js", "ts", "jsx", "tsx",
@@ -63,6 +79,7 @@ enum class DocFormat {
                 "rb", "php", "swift", "m", "scala", "lua", "pl", "r",
                 "sql", "sh", "bash", "zsh", "ps1", "bat", "cmd", "gradle",
                 "groovy", "css", "scss", "less", "vue", "toml" -> CODE
+                "xlsx", "xlsm" -> XLSX
                 "pdf" -> PDF
                 else -> null
             }
@@ -95,7 +112,7 @@ enum class DocFormat {
          * 两者都没有时按 MARKDOWN 处理 —— 老版本行为，保证不回归。
          */
         fun detect(name: String?, mime: String?): DocFormat =
-            ofExtension(name) ?: ofMime(mime) ?: MARKDOWN
+            ofExtension(name) ?: ofMime(mime) ?: UNSUPPORTED
 
         /** 供 SAF 文件选择器使用：把所有支持的 MIME 都声明上。 */
         val pickerMimeTypes: Array<String> = arrayOf(

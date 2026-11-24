@@ -39,7 +39,16 @@ object PdfAdapter {
      * 每页一个 [MdBlock.PdfPage]；目录存在时，在最前面补一组标题块，
      * 让目录抽屉可以跳转（跳转落到对应页的块下标）。
      */
-    fun parse(bytes: ByteArray): ParsedDoc {
+    /**
+     * 解析 PDF。页数与每页尺寸以 [PdfRenderer] 为准。
+     *
+     * 为什么不靠正则数 /Type /Page：那个字符串在真实 PDF 里会出现在对象流、
+     * 注释、甚至页面树的引用里，数出来常常偏多。
+     * 多出来的页没有真实内容，PdfRenderer.openPage 就越界报
+     * "Invalid page index"（用户实测到的问题）。
+     * PdfRenderer.pageCount 是权威值，直接用它。
+     */
+    fun parse(bytes: ByteArray, pageSizes: List<Pair<Int, Int>>? = null): ParsedDoc {
         val info = inspect(bytes)
         val blocks = ArrayList<MdBlock>()
 
@@ -48,21 +57,33 @@ object PdfAdapter {
             blocks.add(MdBlock.Heading(level.coerceIn(1, 6), listOf(MdInline.Text(title))))
         }
 
-        for (i in 0 until info.pageCount) {
-            blocks.add(MdBlock.PdfPage(i, 595, 842))
+        val count = pageSizes?.size ?: info.pageCount
+        for (i in 0 until count) {
+            val size = pageSizes?.getOrNull(i)
+            blocks.add(MdBlock.PdfPage(i, size?.first ?: 595, size?.second ?: 842))
         }
 
         return ParsedDoc(blocks, info.textByPage.joinToString(" "))
     }
 
-    /** 只取元信息，不构造块。供界面显示限制提示与页数。 */
-    fun inspect(bytes: ByteArray): PdfResult {
+    /**
+     * 只取元信息，不构造块。
+     *
+     * [withText] 为 false 时跳过全文提取 —— 这一步要对每个 stream 做 Inflate + 正则，
+     * 大 PDF 上要几秒甚至十几秒。打开文档只需要页数与目录，
+     * 文字层留给搜索时再按需提取，否则用户会看到长时间的「加载中」。
+     */
+    fun inspect(bytes: ByteArray, withText: Boolean = false): PdfResult {
         val text = if (bytes.size <= MAX_STREAM_SCAN) String(bytes, Charsets.ISO_8859_1) else ""
 
         val encrypted = text.contains("/Encrypt")
         val pageCount = countPages(text)
         val outline = if (encrypted) emptyList() else runCatching { parseOutline(bytes, text) }.getOrDefault(emptyList())
-        val texts = if (encrypted) List(pageCount) { "" } else runCatching { extractText(bytes, text) }.getOrDefault(List(pageCount) { "" })
+        val texts = if (!withText || encrypted) {
+            List(pageCount) { "" }
+        } else {
+            runCatching { extractText(bytes, text) }.getOrDefault(List(pageCount) { "" })
+        }
 
         return PdfResult(pageCount, outline, texts, encrypted)
     }

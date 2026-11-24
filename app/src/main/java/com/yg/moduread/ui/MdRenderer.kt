@@ -70,6 +70,9 @@ import kotlinx.coroutines.withContext
 /** 正文行高：1.75 是中文长文阅读的舒适区间。 */
 private const val LINE_HEIGHT_RATIO = 1.75f
 
+/** 宽表格（>4 列）的每列固定宽度。所有行共用，保证上下对齐。 */
+private const val COLUMN_WIDTH_DP = 140
+
 @Composable
 fun MdBlockView(
     block: MdBlock,
@@ -80,7 +83,9 @@ fun MdBlockView(
     /** 链接点击：上层按 [MdDocResolver] 分派锚点 / 兄弟文档 / 外部浏览器。 */
     onAnchor: (String) -> Unit = {},
     /** 长按正文：用于加书签。参数是块自身（上层据此取摘要）。 */
-    onLongPress: (() -> Unit)? = null
+    onLongPress: (() -> Unit)? = null,
+    /** PDF 页点击回调。 */
+    onOpenPdfViewer: (android.graphics.Bitmap, String) -> Unit = { _, _ -> }
 ) {
     when (block) {
         is MdBlock.Heading -> HeadingView(block, baseFontSize, modifier, onAnchor)
@@ -108,7 +113,7 @@ fun MdBlockView(
 
         is MdBlock.Image -> ImageView(block, modifier, docUri)
         is MdBlock.EmbeddedImage -> EmbeddedImageView(block, modifier)
-        is MdBlock.PdfPage -> PdfPageSlot(block, docUri, modifier)
+        is MdBlock.PdfPage -> PdfPageSlot(block, docUri, modifier, onOpenPdfViewer)
         is MdBlock.Rule -> RuleLine(modifier)
     }
 }
@@ -355,9 +360,15 @@ private fun TableView(block: MdBlock.Table, baseFontSize: Float, modifier: Modif
     val columns = maxOf(block.head.size, block.rows.maxOfOrNull { it.size } ?: 0)
     if (columns == 0) return
     val cellFont = baseFontSize * 0.82f
-    // 列少时按内容宽度加权分配（不横向滚动），列多时退化为固定列宽 + 横向滚动
+    // 列宽必须由「整张表」统一决定，不能每列各自按内容撑开 ——
+    // 那样同一列在不同行宽窄不同，行列必然对不齐（这是用户反馈的核心问题）。
+    //
+    // 策略：
+    //  - 列数 ≤ 4：按内容加权，占满屏宽，不横向滚动
+    //  - 列数 > 4：每列固定宽度，整表横向滚动；所有行共用同一套宽度
     val fits = columns <= 4
     val weights = remember(block) { columnWeights(block, columns) }
+    val fixedCellWidth = if (fits) 0.dp else COLUMN_WIDTH_DP.dp
 
     Column(
         modifier
@@ -367,7 +378,7 @@ private fun TableView(block: MdBlock.Table, baseFontSize: Float, modifier: Modif
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .then(if (fits) Modifier else Modifier.horizontalScroll(rememberScrollState()))
     ) {
-        TableRowView(block.head, columns, cellFont, fits, weights, header = true)
+        TableRowView(block.head, columns, cellFont, fits, weights, fixedCellWidth, header = true)
         block.rows.forEach { row ->
             Box(
                 Modifier
@@ -375,7 +386,7 @@ private fun TableView(block: MdBlock.Table, baseFontSize: Float, modifier: Modif
                     .height(1.dp)
                     .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
             )
-            TableRowView(row, columns, cellFont, fits, weights, header = false)
+            TableRowView(row, columns, cellFont, fits, weights, fixedCellWidth, header = false)
         }
     }
 }
@@ -415,6 +426,8 @@ private fun TableRowView(
     cellFont: Float,
     fits: Boolean,
     weights: List<Float>,
+    /** 非 fits 模式下每列的固定宽度；所有行共用，保证上下对齐。 */
+    fixedCellWidth: androidx.compose.ui.unit.Dp,
     header: Boolean
 ) {
     Row(
@@ -436,10 +449,13 @@ private fun TableRowView(
                 lineHeight = (cellFont * 1.5f).sp,
                 fontWeight = if (header) FontWeight.SemiBold else FontWeight.Normal,
                 textAlign = align,
+                // 两种模式都用「确定的宽度」：
+                // fits 用 weight（同一行内按权重分屏宽，所有行一致）；
+                // 非 fits 用固定 dp（所有行同一列同宽，横向滚动时整体平移）。
                 modifier = if (fits) {
                     Modifier.weight(weights.getOrElse(c) { 1f }).padding(horizontal = 8.dp)
                 } else {
-                    Modifier.widthIn(min = 110.dp, max = 240.dp).padding(horizontal = 12.dp)
+                    Modifier.width(fixedCellWidth).padding(horizontal = 10.dp)
                 }
             )
         }
