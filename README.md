@@ -52,7 +52,7 @@
 ## 二、工程目录结构
 
 ```
-ModuReader/
+AllView/
 ├── settings.gradle.kts
 ├── build.gradle.kts                    # AGP 8.5.2 / Kotlin 1.9.24
 ├── gradle.properties
@@ -81,7 +81,7 @@ ModuReader/
         ├── main/
         │   ├── AndroidManifest.xml
         │   ├── res/
-        │   │   ├── values/strings.xml          # app_name = 墨读
+        │   │   ├── values/strings.xml          # app_name = AllView
         │   │   ├── values/themes.xml           # 启动窗口底色（浅）
         │   │   ├── values-night/themes.xml     # 启动窗口底色（深）
         │   │   ├── drawable/ic_launcher_*.xml  # 自适应图标
@@ -135,7 +135,7 @@ ModuReader/
 | 分隔线 | 支持 | 1dp 细线 |
 | **全文搜索** | 支持 | 命中列表带块号与上下文片段，点击跳转；大小写不敏感，单字查询被拒 |
 | **代码高亮** | 支持 | 手写 tokenizer：kotlin/python/bash/json；未知语言原样输出 |
-| **外部打开** | 支持 | 文件管理器「用墨读打开」；只声明 `text/markdown`，不抢 `.txt` |
+| **外部打开** | 支持 | 文件管理器「用 AllView 打开」；只声明 `text/markdown`，不抢 `.txt` |
 | **最近文件** | 支持 | 空态页列最近 8 本，可单独移除；纯 SharedPreferences，无数据库 |
 | **目录抽屉** | 支持 | 按级别缩进，点击跳转；打开时自动定位并高亮当前章节 |
 | **纸张主题** | 支持 | 纸白 / 米黄 / 夜间，与深色模式正交，只调底色不动配色 |
@@ -154,7 +154,7 @@ ModuReader/
 
 ```bash
 git clone https://github.com/Black2716/ModuRead.git
-cd ModuRead
+cd AllView
 ```
 
 仓库不含 `local.properties`（里面有本机 SDK 的绝对路径），克隆后需要自己生成一份，或直接设置环境变量 `ANDROID_HOME`。
@@ -186,7 +186,7 @@ adb push sample/demo.md   /sdcard/Download/
 adb push sample/pic.png   /sdcard/Download/
 ```
 
-1. 启动应用，首屏为空态：「墨读 / 打开一个本地 .md 文件开始阅读 / 选择文件」。
+1. 启动应用，首屏为空态：「AllView / 打开一个本地文件开始阅读 / 选择文件」。
 2. 点「选择文件」→ 系统 SAF → 选择 `sample.md`，顶部大标题 + 正文同步出现。
 3. 按元素检查（`demo.md` 覆盖全部元素）：标题、段落、嵌套有序/无序列表、引用块（含嵌套引用）、代码块（语言标签 `python`、横向滚动）、4 列表格、图片、链接、分隔线。
 4. 点底部 `A-` / `A+`：字号 13–26sp 逐级变化，正文立即重排，不重新解析。

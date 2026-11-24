@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        // 冷启动时来自「用墨读打开」的 uri，先交给 ViewModel，等界面首帧后再消费
+        // 冷启动时来自「用 AllView 打开」的 uri，先交给 ViewModel，等界面首帧后再消费
         vm.pendingExternalUri = ExternalOpen.uriOf(intent)
         setContent {
             val prefs by vm.readerPrefs.collectAsStateWithLifecycle()

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ModuRead"
+rootProject.name = "AllView"
 include(":app")

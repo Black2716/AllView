@@ -1,7 +1,7 @@
-# 手册二：DSH 侧边栏（better-sidebar）的 Git 怎么用（墨读 / ModuRead）
+# 手册二：DSH 侧边栏（better-sidebar）的 Git 怎么用（AllView）
 
 > 对象：DSH 右侧边栏插件 **dsh-better-sidebar 0.30.1** 的 `Git` 标签页（不是 VS Code）  
-> 项目目录：`<本地项目目录>`（示例 `E:/code/project/vibe/ModuReader`）  
+> 项目目录：`<本地项目目录>`（示例 `E:/code/project/vibe/AllView`）  
 > 前置：已按手册一第 0 章配好身份与凭据。侧边栏不自己管凭据，它调用**同一个系统 git**，所以凭据、`.git/config` 完全共用。
 
 一句话原则：**日常提交、推送、放弃改动点面板；打 tag、逐块暂存、强制推送、解分叉回终端**（原因见第 8 节）。
@@ -15,7 +15,7 @@
 侧边栏的 Git 作用域是**当前会话的 cwd**。先在对话里把工作目录切到项目根（含 `settings.gradle.kts` 的那层）：
 
 ```
-working_directory(cd: "E:/code/project/vibe/ModuReader")
+working_directory(cd: "E:/code/project/vibe/AllView")
 ```
 
 cwd 不在仓库里时，面板只显示一句 `当前目录不是 git 仓库`。
@@ -388,19 +388,19 @@ main        当前分支
 
 ⑦ 打 tag 并推 tag（终端，必须）
    VERSION=1.0.1
-   git tag -a v$VERSION -m "墨读 $VERSION"
+   git tag -a v$VERSION -m "AllView $VERSION"
    git push origin v$VERSION
 
 ⑧ 备 APK（终端；dist/ 被忽略，不进版本历史）
    mkdir -p dist
-   cp app/build/outputs/apk/release/app-release.apk dist/ModuRead-$VERSION-release.apk
+   cp app/build/outputs/apk/release/app-release.apk dist/AllView-$VERSION-release.apk
 
 ⑨ 传 Release（终端，必须）
-   gh release create v$VERSION "dist/ModuRead-$VERSION-release.apk" \
-     --title "墨读 $VERSION" --notes "本次改动摘要"
+   gh release create v$VERSION "dist/AllView-$VERSION-release.apk" \
+     --title "AllView $VERSION" --notes "本次改动摘要"
 
 ⑩ 验收（终端）
-   curl -sIL "https://github.com/Black2716/ModuRead/releases/download/v$VERSION/ModuRead-$VERSION-release.apk" \
+   curl -sIL "https://github.com/Black2716/ModuRead/releases/download/v$VERSION/AllView-$VERSION-release.apk" \
      | grep -iE 'HTTP/|content-length'
 
 ⑪ CI

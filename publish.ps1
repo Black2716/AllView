@@ -13,7 +13,7 @@ $owner = (Invoke-RestMethod -Uri "$api/user" -Headers $h).login
 
 try {
   Invoke-RestMethod -Uri "$api/user/repos" -Method Post -Headers $h -Body (@{
-    name = $repo; private = $false; description = "墨读 ModuRead · 轻量级 Android Markdown 阅读器"
+    name = $repo; private = $false; description = "AllView · 轻量级多格式阅读器"
   } | ConvertTo-Json) | Out-Null
   "==> 仓库已创建"
 } catch {
@@ -26,14 +26,14 @@ git remote add origin "https://github.com/$owner/$repo.git"
 git -c http.postBuffer=524288000 push $url main:main
 "==> 已推送 main"
 
-$apk = "dist/ModuRead-1.0.0-release.apk"
+$apk = "dist/AllView-1.0.0-release.apk"
 if (Test-Path $apk) {
   git tag -f v1.0.0 | Out-Null
   git -c http.postBuffer=524288000 push -f $url v1.0.0 | Out-Null
   $rel = Invoke-RestMethod -Uri "$api/repos/$owner/$repo/releases" -Method Post -Headers $h -Body (@{
-    tag_name = "v1.0.0"; name = "墨读 1.0.0"; body = "首个版本：本地 Markdown 阅读器。下载 APK 直接安装（minSdk 24）。"
+    tag_name = "v1.0.0"; name = "AllView 1.0.0"; body = "首个版本：本地 Markdown 阅读器。下载 APK 直接安装（minSdk 24）。"
   } | ConvertTo-Json)
-  $up = "https://uploads.github.com/repos/$owner/$repo/releases/$($rel.id)/assets?name=ModuRead-1.0.0-release.apk"
+  $up = "https://uploads.github.com/repos/$owner/$repo/releases/$($rel.id)/assets?name=AllView-1.0.0-release.apk"
   Invoke-RestMethod -Uri $up -Method Post -Headers @{ Authorization = "Bearer $($env:GITHUB_TOKEN)"; "Content-Type" = "application/vnd.android.package-archive" } -InFile $apk | Out-Null
   "==> APK 已上传到 Release v1.0.0"
 } else { "!! 未找到 $apk" }

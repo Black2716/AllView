@@ -1,4 +1,4 @@
-# 墨读 ModuRead 功能扩充方案（v1.1 规划）
+# AllView 功能扩充方案（v1.1 规划）
 
 > **实施状态（2026-11-21）**：档位一全部 5 项 + 档位二的搜索、代码高亮已完成并实测；
 > 单测 17 → **51**，release 1.03 → **1.18 MB**，**0 新增第三方依赖**。
@@ -42,7 +42,7 @@
 
 `AndroidManifest.xml` 只有 `MAIN`/`LAUNCHER`，**没有 `VIEW` intent-filter**。所以：
 
-- 文件管理器里长按 .md →「打开方式」里没有墨读
+- 文件管理器里长按 .md →「打开方式」里没有 AllView
 - 微信/QQ 收到 .md 存到下载目录后，必须手动进 App 再用 SAF 翻目录
 
 且每次切文件都要重新走一遍 SAF；没有「最近文件」。
@@ -102,7 +102,7 @@
 
 | 项 | 内容 |
 |---|---|
-| 解决什么 | C 的另一半：从文件管理器/其他 App 直接「用墨读打开」 |
+| 解决什么 | C 的另一半：从文件管理器/其他 App 直接「用 AllView 打开」 |
 | 实现要点 | Manifest 加 `VIEW` + `android:mimeType="text/markdown"`、`text/x-markdown`、`text/plain` + `pathPattern=".*\\.md"`；`MainActivity` 读 `intent.data` 转 `vm.open()`；补 `onNewIntent` 处理已有实例 |
 | 涉及模块 | `AndroidManifest.xml`、`MainActivity.kt` |
 | 工作量 | ≈ 35 行 / 2 小时 |
