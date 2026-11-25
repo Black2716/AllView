@@ -26,16 +26,23 @@ git remote add origin "https://github.com/$owner/$repo.git"
 git -c http.postBuffer=524288000 push $url main:main
 "==> 已推送 main"
 
-$apk = "dist/AllView-1.0.0-release.apk"
+# 版本号唯一来源：app/build.gradle.kts 的 versionName。
+# 不要写死 —— 之前写死 1.0.0，导致 Release 说明与实际包不一致。
+$VERSION = (Select-String -Path "app/build.gradle.kts" -Pattern 'versionName\s*=\s*"([^"]+)"').Matches.Groups[1].Value
+if (-not $VERSION) { throw "无法从 app/build.gradle.kts 读出 versionName" }
+$TAGV = "v$VERSION"
+Write-Host "==> 版本: $VERSION（来自 app/build.gradle.kts）"
+
+$apk = "dist/AllView-$VERSION-release.apk"
 if (Test-Path $apk) {
-  git tag -f v1.0.0 | Out-Null
-  git -c http.postBuffer=524288000 push -f $url v1.0.0 | Out-Null
+  git tag -f $TAGV | Out-Null
+  git -c http.postBuffer=524288000 push -f $url $TAGV | Out-Null
   $rel = Invoke-RestMethod -Uri "$api/repos/$owner/$repo/releases" -Method Post -Headers $h -Body (@{
-    tag_name = "v1.0.0"; name = "AllView 1.0.0"; body = "首个版本：本地 Markdown 阅读器。下载 APK 直接安装（minSdk 24）。"
+    tag_name = $TAGV; name = "AllView $VERSION"; body = "AllView $VERSION。下载 AllView-$VERSION-release.apk 直接安装（minSdk 24）。"
   } | ConvertTo-Json)
-  $up = "https://uploads.github.com/repos/$owner/$repo/releases/$($rel.id)/assets?name=AllView-1.0.0-release.apk"
+  $up = "https://uploads.github.com/repos/$owner/$repo/releases/$($rel.id)/assets?name=AllView-$VERSION-release.apk"
   Invoke-RestMethod -Uri $up -Method Post -Headers @{ Authorization = "Bearer $($env:GITHUB_TOKEN)"; "Content-Type" = "application/vnd.android.package-archive" } -InFile $apk | Out-Null
-  "==> APK 已上传到 Release v1.0.0"
+  "==> APK 已上传到 Release $TAGV"
 } else { "!! 未找到 $apk" }
 
 "仓库: https://github.com/$owner/$repo"

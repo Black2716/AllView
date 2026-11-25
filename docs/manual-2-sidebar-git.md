@@ -299,7 +299,7 @@ main        当前分支
 
 | 操作 | 为什么面板不行 | 命令 |
 |---|---|---|
-| **打 tag / 推 tag** | 面板没有 tag 功能 | `git tag -a v1.0.1 -m "..."` + `git push origin v1.0.1` |
+| **打 tag / 推 tag** | 面板没有 tag 功能 | `git tag -a v1.2.0 -m "..."` + `git push origin v1.2.0` |
 | **上传 Release 资产** | 属 GitHub 平台功能 | `gh release create/upload`（手册一第 6 章） |
 | **逐块暂存** | 只有整文件粒度 | `git add -p` |
 | **amend 提交 / 撤销上次提交** | 无对应按钮 | `git commit --amend` / `git reset --soft HEAD~1` |
@@ -356,8 +356,8 @@ main        当前分支
 | 6 | `git pull --rebase` | 同步（分叉时） | ❌ 面板只做 `--ff-only` |
 | 7 | `git log --oneline -5` | 看最近提交 | ✅ 提交图 |
 | 8 | `git restore <文件>` | 丢弃未提交改动 | ✅ 右键→放弃更改 |
-| 9 | `git push origin v1.0.1` | 推 tag（发版） | ❌ 无 tag 功能 |
-| 10 | `gh release upload v1.0.1 <apk> --clobber` | 换 Release 里的 APK | ❌ 平台功能 |
+| 9 | `git push origin v1.2.0` | 推 tag（发版） | ❌ 无 tag 功能 |
+| 10 | `gh release upload v1.2.0 <apk> --clobber` | 换 Release 里的 APK | ❌ 平台功能 |
 
 ---
 
@@ -387,7 +387,7 @@ main        当前分支
    期望：0↓ 0↑
 
 ⑦ 打 tag 并推 tag（终端，必须）
-   VERSION=1.0.1
+   VERSION=1.2.0
    git tag -a v$VERSION -m "AllView $VERSION"
    git push origin v$VERSION
 

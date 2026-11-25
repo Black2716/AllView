@@ -294,22 +294,22 @@ git config --global pull.rebase true
 ### 5.1 创建附注 tag
 
 ```bash
-git tag -a v1.0.1 -m "AllView 1.0.1：修复表格列宽"
+git tag -a v1.2.0 -m "AllView 1.2.0：修复表格列宽"
 ```
 
-> 已有的 `v1.0.0` 不要动；版本号只在「要发一个可安装包」时递增。
+> 已发布过的 tag（如 `v1.0.0`、`v1.1.0`、`v1.2.0`）不要动；版本号只在「要发一个可安装包」时递增。
 
 ### 5.2 推送 tag
 
 ```bash
-git push origin v1.0.1
+git push origin v1.2.0
 ```
 
 期望：
 
 ```
 To https://github.com/Black2716/ModuRead.git
- * [new tag]         v1.0.1 -> v1.0.1
+ * [new tag]         v1.2.0 -> v1.2.0
 ```
 
 **注意**：`git push` 不会顺带推 tag，必须显式推。
@@ -319,8 +319,8 @@ To https://github.com/Black2716/ModuRead.git
 ```bash
 git tag                          # 本地所有 tag
 git ls-remote --tags origin      # 远端所有 tag
-git tag -d v1.0.1                          # 删本地
-git push origin --delete v1.0.1            # 删远端
+git tag -d v1.2.0                          # 删本地
+git push origin --delete v1.2.0            # 删远端
 ```
 
 ---
@@ -332,7 +332,7 @@ git push origin --delete v1.0.1            # 删远端
 ```bash
 ./gradlew :app:assembleRelease
 mkdir -p dist
-cp app/build/outputs/apk/release/app-release.apk dist/AllView-1.0.1-release.apk
+cp app/build/outputs/apk/release/app-release.apk dist/AllView-1.2.0-release.apk
 ```
 
 `dist/` 与 `*.apk` 都在 `.gitignore` 里，**APK 永远不会进版本历史**，只挂 Release。用 `git status` 确认它没出现在变更列表里。
@@ -341,21 +341,21 @@ cp app/build/outputs/apk/release/app-release.apk dist/AllView-1.0.1-release.apk
 
 ```bash
 # 新版本一次性建 Release + 传资产
-gh release create v1.0.1 "dist/AllView-1.0.1-release.apk" \
-  --title "AllView 1.0.1" \
+gh release create v1.2.0 "dist/AllView-1.2.0-release.apk" \
+  --title "AllView 1.2.0" \
   --notes "修复 4 列表格列宽；补充单测。"
 
 # 给已存在的 Release 追加/替换资产
-gh release upload v1.0.1 "dist/AllView-1.0.1-release.apk" --clobber
+gh release upload v1.2.0 "dist/AllView-1.2.0-release.apk" --clobber
 ```
 
-升级 gh 后可自动生成更新说明：`gh release create v1.0.1 --generate-notes dist/AllView-1.0.1-release.apk`。
+升级 gh 后可自动生成更新说明：`gh release create v1.2.0 --generate-notes dist/AllView-1.2.0-release.apk`。
 
 ### 6.3 方式 B：用 `curl`（没装 gh 时）
 
 ```bash
 export GH_TOKEN=ghp_xxxxxxxxxxxxxxxx     # PAT，需要 repo + workflow 权限
-VERSION=1.0.1
+VERSION=1.2.0
 REPO=Black2716/ModuRead
 
 # 1) 建 Release（tag 必须已推送）
@@ -388,7 +388,7 @@ unset GH_TOKEN     # 用完就清掉，别留在会话里
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| `create 404` | tag 还没推到远端 | 先 `git push origin v1.0.1` |
+| `create 404` | tag 还没推到远端 | 先 `git push origin v1.2.0` |
 | `create 422` | 该 tag 已有 Release | 改用 `gh release upload ... --clobber`，或先删 Release |
 | `upload 422` | 同名资产已存在 | 加 `--clobber`（gh）或先 `DELETE .../assets/<id>` |
 | `create 401` | token 错/过期/没权限 | 重新 `gh auth login` 或换 PAT |
@@ -614,8 +614,8 @@ unset GH_TOKEN
 | 6 | `git pull --rebase` | 同步远端 |
 | 7 | `git log --oneline -5` | 看最近提交 |
 | 8 | `git restore <文件>` | 丢弃未提交改动 |
-| 9 | `git push origin v1.0.1` | 推 tag（发版） |
-| 10 | `gh release upload v1.0.1 <apk> --clobber` | 换 Release 里的 APK |
+| 9 | `git push origin v1.2.0` | 推 tag（发版） |
+| 10 | `gh release upload v1.2.0 <apk> --clobber` | 换 Release 里的 APK |
 
 ---
 
@@ -642,7 +642,7 @@ git commit -m "渲染：表格列宽按内容加权"
 git push
 
 # ── ⑥ 打 tag 并推 tag ────────────────────────────
-VERSION=1.0.1
+VERSION=1.2.0
 git tag -a v$VERSION -m "AllView $VERSION"
 git push origin v$VERSION
 

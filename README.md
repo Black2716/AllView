@@ -11,11 +11,12 @@
 | 技术栈 | Kotlin + Jetpack Compose（Material 3） |
 | minSdk / targetSdk / compileSdk | 24 / 34 / 34 |
 | 解析内核 | commonmark-java 0.22.0 + GFM Tables |
-| release APK 实测体积 | **1.25 MB**（1,305,459 字节；R8 + 资源压缩，含公式/目录/搜索/高亮、重做界面与纸张主题） |
+| 当前版本 | **1.2.0**（versionCode 2） |
+| release APK 实测体积 | **1.33 MB**（1,398,387 字节；R8 + 资源压缩，含 PPTX 表格/公式/图表渲染与 PDF 目录修复） |
 | debug APK 实测体积 | 7.8 MB（不裁剪，仅用于调试） |
 | 冷启动（Pixel 后端 API 34 模拟器，host GPU） | **302–505 ms**（`Displayed` 打点） |
 | 9.2 万字文档打开到首屏可读 | 约 3.4 s（含 `uiautomator` 轮询开销） |
-| 单测 | **153/153**（9 解析 + 8 公式 + 7 目录 + 6 最近文件 + 6 外部打开 + 7 搜索 + 8 高亮 + 4 纸张主题 + 8 任务列表 + 8 书签 + 7 文档路径 + 7 多开会话 + 5 路径回归 + 7 格式判定 + 12 文本解析 + 12 容器格式 + 14 PDF + 8 真实样本端到端 + 9 源码格式） |
+| 单测 | **198/198**（9 解析 + 8 公式 + 7 目录 + 6 最近文件 + 6 外部打开 + 7 搜索 + 8 高亮 + 4 纸张主题 + 8 任务列表 + 8 书签 + 7 文档路径 + 7 多开会话 + 5 路径回归 + 7 格式判定 + 12 文本解析 + 12 容器格式 + 14 PDF + 8 真实样本端到端 + 9 源码格式 + 45 PPTX/XLSX/表格对齐/嵌入图片等新增用例） |
 
 ## 一、界面截图
 
@@ -178,6 +179,26 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 Windows 用 `gradlew.bat`；本地无 Gradle 时 wrapper 会自行下载 8.7。
 
+## 版本与发版
+
+版本号的**唯一来源**是 `app/build.gradle.kts`:
+
+```kotlin
+versionCode = 2
+versionName = "1.2.0"
+```
+
+发版流程（三处会自动对齐，无需手改文档里的版本串）：
+
+1. 改 `versionCode`（整数递增）与 `versionName`
+2. 在 [CHANGELOG.md](CHANGELOG.md) 顶部加一节
+3. 提交后打 tag 并推送：`git tag -a v1.2.0 -m "..." && git push origin v1.2.0`
+
+推送 `v*` tag 会触发 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
+跑单测 → 构建 APK → 重命名为 `AllView-<版本>.apk` → 发布到 GitHub Release。
+
+`publish.sh` / `publish.ps1` 也从 `build.gradle.kts` 读取版本号，不再硬编码。
+
 ## 五、验收步骤（已在模拟器实测通过）
 
 ```bash
@@ -215,7 +236,7 @@ adb push sample/pic.png   /sdcard/Download/
 
 ```
 app-debug.apk     7.79 MB   （不混淆，仅调试用）
-app-release.apk   1.20 MB   （R8 + shrinkResources；公式 +14 KB，目录/进度 +60 KB，最近文件/外部打开 +3 KB，搜索 +37 KB，代码高亮 +63 KB，界面重做 +14 KB）
+app-release.apk   1.33 MB   （R8 + shrinkResources；1.2.0 相比上一版增量主要来自 PPTX 渲染链路：表格折行、OMML→LaTeX 公式、柱状图，以及 PDF 目录树解析）
 ```
 
 ## 七、性能设计

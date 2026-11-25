@@ -9,8 +9,15 @@ set -euo pipefail
 : "${GITHUB_TOKEN:?请先设置 GITHUB_TOKEN 环境变量}"
 REPO_NAME="${REPO_NAME:-ModuRead}"
 PRIVATE="${PRIVATE:-false}"
-APK="dist/AllView-1.0.0-release.apk"
 API="https://api.github.com"
+
+# 版本号唯一来源：app/build.gradle.kts 的 versionName。
+# 不要在这里写死 —— 之前写死 1.0.0，导致 release 说明与实际包不一致。
+VERSION="$(sed -n 's/.*versionName *= *"\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)"
+: "${VERSION:?无法从 app/build.gradle.kts 读出 versionName}"
+APK="dist/AllView-${VERSION}-release.apk"
+TAG="v${VERSION}"
+echo "==> 版本: ${VERSION}（来自 app/build.gradle.kts）"
 
 OWNER="${GITHUB_OWNER:-$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" "$API/user" | sed -n 's/.*"login": *"\([^"]*\)".*/\1/p' | head -1)}"
 echo "==> 账号: $OWNER  仓库: $REPO_NAME  private=$PRIVATE"
@@ -35,17 +42,16 @@ echo "==> 已推送 main"
 
 # 3. 打 tag 并创建 Release，上传 APK（APK 不进版本历史）
 if [ -f "$APK" ]; then
-  TAG="v1.0.0"
   git tag -f "$TAG" >/dev/null 2>&1 || true
   git -c http.postBuffer=524288000 push -f "$URL" "$TAG" >/dev/null 2>&1 || true
 
   RELEASE_ID=$(curl -sS -X POST "$API/repos/$OWNER/$REPO_NAME/releases" \
     -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Accept: application/vnd.github+json' \
-    -d "{\"tag_name\":\"$TAG\",\"name\":\"AllView 1.0.0\",\"body\":\"首个版本：本地 Markdown 阅读器。下载 AllView-1.0.0-release.apk 直接安装（minSdk 24）。\"}" \
+    -d "{\"tag_name\":\"$TAG\",\"name\":\"AllView $VERSION\",\"body\":\"AllView $VERSION。下载 AllView-$VERSION-release.apk 直接安装（minSdk 24）。\"}" \
     | sed -n 's/.*"id": *\([0-9]*\).*/\1/p' | head -1)
 
   if [ -n "${RELEASE_ID:-}" ]; then
-    curl -sS -X POST "https://uploads.github.com/repos/$OWNER/$REPO_NAME/releases/$RELEASE_ID/assets?name=AllView-1.0.0-release.apk" \
+    curl -sS -X POST "https://uploads.github.com/repos/$OWNER/$REPO_NAME/releases/$RELEASE_ID/assets?name=AllView-$VERSION-release.apk" \
       -H "Authorization: Bearer $GITHUB_TOKEN" -H 'Content-Type: application/vnd.android.package-archive' \
       --data-binary @"$APK" -o /tmp/gh_asset.json
     echo "==> APK 已上传到 Release $TAG"
