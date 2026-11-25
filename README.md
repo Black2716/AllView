@@ -44,6 +44,15 @@
 
 ![目录跟随当前章节](docs/13-toc-follow.png)
 
+### PPTX 渲染（1.2.0 新增）
+
+| 表格、配色与图表 | 公式与表格 |
+|---|---|
+| ![PPTX 表格](docs/14-pptx-table.png) | ![PPTX 公式](docs/15-pptx-math.png) |
+
+表格按真实列宽折行，长文本不溢出；公式走 OMML → LaTeX → 语法树渲染；
+深色版式自动反色，柱状图按 `c:barChart` 数据绘制。
+
 ![LaTeX 公式渲染](docs/05-math.png)
 
 分式、上下标、求最值的上下限、定界符、根号、重音、希腊字母与关系符均为原生排版，不走 WebView。
@@ -118,6 +127,21 @@ AllView/
             ├── RecentFilesTest.kt              # 6 个最近文件单测
             └── ExternalOpenTest.kt             # 6 个外部打开判据单测
 ```
+
+## 二·五、支持的文件格式
+
+| 类别 | 扩展名 | 说明 |
+|---|---|---|
+| Markdown | `.md` `.markdown` | 完整支持，见下节渲染表 |
+| 纯文本 | `.txt` `.log` | 自动识别编码；日志按行保留 |
+| 结构化 | `.json` `.xml` `.yaml` `.ini` `.csv` `.tsv` | 缩进 / 分节 / 表格化呈现 |
+| 字幕 | `.srt` `.vtt` | 按时间轴分块 |
+| Office 容器 | `.docx` `.xlsx` `.pptx` `.odt` | ZIP + XML 解析；PPTX 整页 16:9 渲染 |
+| 电子书 | `.epub` | 按章节顺序展开 |
+| 网页 | `.html` `.htm` | 转块显示，不执行脚本 |
+| PDF | `.pdf` | 逐页渲染 + `/Outlines` 目录树 |
+| 源码 | `.kt` `.py` `.js` `.java` `.sh` 等 | 语法高亮 |
+| 不支持 | `.doc` `.ppt` 等旧版二进制 | 给出明确提示，不做乱码降级 |
 
 ## 三、渲染支持
 
