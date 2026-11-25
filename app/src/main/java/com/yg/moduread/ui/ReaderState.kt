@@ -28,8 +28,8 @@ data class DocumentState(
     val encrypted: Boolean = false,
     /** 文字层是否可用（扫描件为 false，搜索应提示不可用）。 */
     val hasTextLayer: Boolean = true,
-    /** DOCX 的 HTML（图片 base64 内嵌）。非空时用 WebView 渲染。 */
-    val html: String? = null,
+    /** PPTX 逐页 SVG。非空时用 SlideDeckView 按 16:9 显示。 */
+    val slides: com.yg.moduread.format.SlideDeck? = null,
     val loading: Boolean = false,
     val error: String? = null
 )

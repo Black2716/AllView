@@ -113,10 +113,25 @@ fun ReaderScreen(
     // remember 必须带 body 作为 key。文档是异步加载的，首次组合时 body 还是空列表；
     // 若不加 key，闭包会一直捕获那个空列表，条件永远走 body.isEmpty() -> 0f，
     // 进度就卡死在 0%（这正是之前的 bug）。
-    val progress by remember(body) {
+    // PPTX 走 SlideDeckView，列表项是「页」而不是块；
+    // 用 body.size 做分母会让进度永远停在很小的值（实测卡在 4%）。
+    // 分母必须取实际的列表项总数。
+    // 分母必须在 derivedStateOf 内部实时读取。
+    // doc.slides 是异步就绪的：首次组合时 itemCount 为 0，
+    // 若把它当作 remember 的 key，闭包会先捕获 0 并在数据到达后仍不更新，
+    // 进度就永远停在 0%（实测日志确认 count=0）。
+    val progress by remember(doc.docUri) {
         derivedStateOf {
-            if (body.isEmpty()) 0f
-            else (listState.firstVisibleItemIndex.toFloat() / body.size.toFloat()).coerceIn(0f, 1f)
+            val count = doc.slides?.pages?.size ?: body.size
+            if (count <= 0) {
+                0f
+            } else {
+                val idx = listState.firstVisibleItemIndex
+                val off = listState.firstVisibleItemScrollOffset
+                val base = idx.toFloat() / count.toFloat()
+                val within = off.toFloat() / 2000f / count.toFloat()
+                (base + within).coerceIn(0f, 1f)
+            }
         }
     }
 
@@ -142,8 +157,9 @@ fun ReaderScreen(
         val uri = doc.docUri ?: return@LaunchedEffect
         if (body.isEmpty() || restoredFor == uri) return@LaunchedEffect
         restoredFor = uri
-        // +1：0 号位置是页首标题项
-        val target = doc.restoreIndex.coerceIn(0, body.size)
+        // +1：列表第 0 项是文档标题，正文从第 1 项起。
+        // 少这一格会让恢复位置整体偏一页。
+        val target = (doc.restoreIndex + 1).coerceIn(0, body.size)
         if (target > 0 || doc.restoreOffset > 0) {
             listState.scrollToItem(target, doc.restoreOffset)
         }
@@ -153,8 +169,16 @@ fun ReaderScreen(
     LaunchedEffect(jumpTarget, body.size) {
         val target = jumpTarget ?: return@LaunchedEffect
         if (body.isEmpty()) return@LaunchedEffect
-        val clamped = target.coerceIn(0, body.size)
-        listState.animateScrollToItem(clamped)
+        // +1：列表第 0 项是文档标题（DocTitle），正文块从第 1 项开始。
+        // 之前直接用 blockIndex 当下标，整体少了一格，
+        // 于是目标页总是偏上/被相邻页挤到下半屏（用户实测：靠着低栏）。
+        val clamped = (target + 1).coerceIn(0, body.size)
+        listState.scrollToItem(clamped)
+        // 立即上报一次可见块。
+        // snapshotFlow 只在值「变化」时发射：跳转前后若停在同一下标
+        //（例如从第 9 页跳到同页的另一条目录项），它不会触发，
+        // 高亮就还停在旧条目上（用户实测「差一格」）。
+        onVisibleBlock(clamped - 1)
         onJumpConsumed()
     }
 
@@ -165,7 +189,12 @@ fun ReaderScreen(
     // 与落盘的 1 秒节流分开 —— 高亮要跟手，写盘不需要。
     LaunchedEffect(listState, body.size) {
         snapshotFlow { listState.firstVisibleItemIndex }
-            .collect { index -> onVisibleBlock(index.coerceIn(0, body.size)) }
+            .collect { index ->
+                // 列表第 0 项是 DocTitle，正文块从第 1 项开始；
+                // TocEntry.blockIndex 用的是正文块下标。
+                // 不减这一格，目录高亮会整体偏移一页（用户实测）。
+                onVisibleBlock((index - 1).coerceIn(0, body.size))
+            }
     }
 
     // 位置变化后节流 1 秒落盘，避免每帧都写 SharedPreferences
@@ -178,7 +207,6 @@ fun ReaderScreen(
     Box(
         Modifier
             .fillMaxSize()
-            .padding(top = insets.calculateTopPadding())
     ) {
         // 空态 → 文档的切换用透明度过渡，避免 Crossfade（animation 模块）
         val contentAlpha by animateFloatAsState(
@@ -189,6 +217,19 @@ fun ReaderScreen(
 
         when {
             doc.loading && doc.blocks.isEmpty() -> LoadingView()
+            // PPTX 且成功生成 SVG：按 16:9 逐页显示。
+            // WebView 可见时才会正常绘制 —— 离屏截图在 Android 上不可靠。
+            doc.slides != null -> {
+                SlideDeckView(
+                    pages = doc.slides.pages,
+                    aspectRatio = doc.slides.aspectRatio,
+                    modifier = Modifier.graphicsLayer { alpha = contentAlpha },
+                    // 复用阅读器的列表状态：进度百分比与顶栏标题都读它，
+                    // 之前用自己的 rememberLazyListState，于是进度永远停在初始值。
+                    listState = listState,
+                    bottomInset = insets.calculateBottomPadding()
+                )
+            }
             doc.blocks.isEmpty() -> EmptyView(
                 error = doc.error,
                 recent = recent,
@@ -196,38 +237,12 @@ fun ReaderScreen(
                 onOpenRecent = onOpenRecent,
                 onForgetRecent = onForgetRecent
             )
-            // DOCX 且成功生成 HTML：交给 WebView。
-            // 表格跨页、图片环绕、列表缩进由浏览器排版引擎处理，
-            // 比自己用 Compose 复现准确得多；分页也由页面内脚本完成。
-            doc.html != null -> {
-                DocxWebView(html = doc.html, modifier = Modifier.fillMaxSize())
-            }
-            // ODT 与「HTML 生成失败」的 DOCX 退回自绘整页视图。
-            doc.format == DocFormat.DOCX || doc.format == DocFormat.ODT -> {
-                androidx.compose.foundation.lazy.LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 12.dp,
-                        end = 12.dp,
-                        top = 56.dp,
-                        bottom = 96.dp + insets.calculateBottomPadding()
-                    )
-                ) {
-                    item(key = "title") {
-                        DocTitle(doc = doc, fontSize = prefs.fontSizeSp)
-                    }
-                    item(key = "pages") {
-                        PagedDocView(
-                            blocks = body,
-                            fontSizeSp = prefs.fontSizeSp,
-                            docUri = doc.docUri,
-                            onAnchor = onLink,
-                            onOpenPdfViewer = onOpenPdfViewer
-                        )
-                    }
-                }
-            }
+            // DOCX / ODT 也走流式渲染。
+            //
+            // 曾尝试两条「整页」路线，都因实际问题回退：
+            //  1. 自绘分页（逐块测高）—— 每次布局全量重测，长文档滑动明显卡顿。
+            //  2. WebView 渲染 HTML —— 会盖住顶栏/进度条/底栏，分页观感也与 PC 端差距大。
+            // 结论：先把内容正确、流畅地读出来更重要；版式还原留待以后单独解决。
             else -> {
                 LazyColumn(
                     state = listState,
@@ -260,6 +275,8 @@ fun ReaderScreen(
                         }
                     }
                 }
+            }
+        }
 
                 // 顶栏淡入淡出：用 animateFloatAsState 而不是 AnimatedVisibility，
                 // 后者会把 androidx.compose.animation 整包拖进 dex
@@ -335,8 +352,6 @@ fun ReaderScreen(
                         )
                     }
                 }
-            }
-        }
     }
 }
 
@@ -365,7 +380,7 @@ private fun DocTitle(doc: DocumentState, fontSize: Float) {
 private fun TopBar(title: String, progress: Float, modifier: Modifier) {
     Column(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(

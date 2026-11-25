@@ -5,10 +5,10 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.yg.moduread.format.ContainerAdapters
 import com.yg.moduread.format.DocFormat
-import com.yg.moduread.format.DocxHtml
 import com.yg.moduread.format.ParsedDoc
 import com.yg.moduread.format.PdfAdapter
 import com.yg.moduread.format.TextAdapters
+import com.yg.moduread.format.PptxAdapter
 import com.yg.moduread.format.XlsxAdapter
 import com.yg.moduread.md.MdBlock
 import com.yg.moduread.md.MdInline
@@ -30,13 +30,10 @@ data class LoadedDoc(
     val encrypted: Boolean = false,
     /** 文字层是否可用。PDF 扫描件为 false，搜索应提示不可用。 */
     val hasTextLayer: Boolean = true,
-    /**
-     * DOCX/ODT 的 HTML 表示（图片已 base64 内嵌）。
-     *
-     * 非空时界面改用 WebView 渲染：表格跨页、图片环绕、列表缩进
-     * 交给浏览器排版引擎，比自己用 Compose 复现准确得多。
-     */
-    val html: String? = null
+    /** PDF 目录（层级, 标题）。只用于目录抽屉，不插进正文。 */
+    val outline: List<Triple<Int, Int, String>> = emptyList(),
+    /** PPTX 的逐页 SVG（HTML）。非空时界面按 16:9 逐页显示。 */
+    val slides: com.yg.moduread.format.SlideDeck? = null
 )
 
 /**
@@ -59,14 +56,26 @@ object DocRepository {
         val title = sanitizeTitle(name.substringAfterLast('/'))
 
         if (format == DocFormat.PDF) {
-            val info = runCatching { PdfAdapter.inspect(raw) }
+            // 打开文档时不提取全文：这一步要解压所有流 + 全文正则，
+            // 大 PDF（图片多）会卡好几秒（用户实测「一直转圈」）。
+            // 页数与目录已足够渲染阅读页；文字层留给搜索按需处理。
+            val info = runCatching { PdfAdapter.inspect(raw, withText = false) }
                 .getOrDefault(PdfAdapter.PdfResult(1, emptyList(), listOf(""), false))
             // 页数与每页尺寸以 PdfRenderer 为准：它是唯一权威来源。
             // 正则数 /Type /Page 会把对象流、注释里的字符串也算进去，
             // 多出来的页 openPage 就越界（用户实测的 "Invalid page index"）。
-            val sizes = PdfPageSizes.read(context, uri)
-            val parsed = runCatching { PdfAdapter.parse(raw, sizes) }
-                .getOrElse { PdfAdapter.parse(raw) }
+            // 不再同步构造 PdfRenderer 读页尺寸：
+            // 它要解析整个文件结构，15MB 文档在设备上要几十秒
+            // （用户实测「一直转圈 2 分钟，加载出来才能滑动」）。
+            // 先用正则估页数，尺寸交给渲染层按屏幕等比缩放。
+            // 直接用 inspect 已经算好的页数。
+            // 之前这里又调了一次 estimatePages(raw)，它会重新创建
+            // 15MB 的字符串并跑一遍全文正则 —— 与 inspect 完全重复，
+            // 白等一倍时间（这就是「转圈一分钟」的一半来源）。
+            val pageCountEstimate = info.pageCount
+            val sizes: List<Pair<Int, Int>>? = null
+            val parsed = runCatching { PdfAdapter.parse(raw, sizes, info) }
+                .getOrElse { PdfAdapter.parse(raw, known = info) }
             return@withContext LoadedDoc(
                 title = title,
                 blocks = parsed.blocks,
@@ -74,9 +83,10 @@ object DocRepository {
                 baseDir = baseDir,
                 docUri = uri.toString(),
                 format = format,
-                pageCount = sizes?.size ?: info.pageCount,
+                pageCount = sizes?.size ?: pageCountEstimate,
                 encrypted = info.encrypted,
-                hasTextLayer = info.hasTextLayer
+                hasTextLayer = info.hasTextLayer,
+                outline = info.outline
             )
         }
 
@@ -102,15 +112,6 @@ object DocRepository {
                 ParsedDoc(TextAdapters.txt(safeDecode(raw)).blocks, safeDecode(raw))
             }
 
-        // DOCX 额外生成 HTML：界面用 WebView 渲染，把表格跨页、图片环绕、
-        // 列表缩进这些版式细节交给浏览器排版引擎。
-        // 生成失败不影响使用 —— blocks 仍然可用，界面会退回 Compose 渲染。
-        val docHtml = if (format == DocFormat.DOCX) {
-            val htmlResult = runCatching { DocxHtml.from(raw) }
-            android.util.Log.i("AllViewHtml", "len=" + (htmlResult.getOrNull()?.length ?: -1) + " err=" + htmlResult.exceptionOrNull())
-            htmlResult.getOrNull()
-        } else null
-
         LoadedDoc(
             title = title,
             blocks = parsed.blocks,
@@ -119,7 +120,16 @@ object DocRepository {
             docUri = uri.toString(),
             format = format,
             hasTextLayer = true,
-            html = docHtml
+            // PPTX 额外生成逐页 SVG：界面据此按 16:9 逐页显示。
+            // 生成失败返回 null，界面自动降级为文本渲染。
+            slides = if (format == DocFormat.PPTX) {
+                val dr = runCatching { PptxAdapter.toDeck(raw) }
+                android.util.Log.i("AllViewPptx", "html0=" +
+                    (dr.getOrNull()?.pages?.firstOrNull()?.take(400) ?: "null"))
+                android.util.Log.i("AllViewPptx", "deck=" +
+                    (dr.getOrNull()?.pages?.size ?: -1) + " err=" + dr.exceptionOrNull())
+                dr.getOrNull()
+            } else null
         )
     }
 
@@ -144,6 +154,7 @@ object DocRepository {
         DocFormat.XML, DocFormat.HTML -> ContainerAdapters.html(safeDecode(raw))
         DocFormat.CODE -> TextAdapters.source(safeDecode(raw), fileName)
         DocFormat.XLSX -> XlsxAdapter.parse(raw)
+        DocFormat.PPTX -> PptxAdapter.parse(raw)
         DocFormat.EPUB -> ContainerAdapters.epub(raw)
         DocFormat.DOCX -> ContainerAdapters.docx(raw)
         DocFormat.ODT -> ContainerAdapters.odt(raw)

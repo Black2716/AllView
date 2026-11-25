@@ -7,6 +7,16 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
+    <!--
+        仅 DOCX 的 WebView 渲染需要：WebView 在初始化时会检查 INTERNET 权限，
+        缺少它会直接抛 SecurityException（实测崩溃）。
+        实际不会产生任何网络流量：
+          - settings.blockNetworkLoads 由页面级 networkSecurityConfig 兜底
+          - 所有图片都是 base64 内嵌，HTML 完全自包含
+          - shouldOverrideUrlLoading 一律返回 true，拦截任何跳转
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

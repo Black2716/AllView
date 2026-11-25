@@ -25,6 +25,8 @@ enum class DocFormat {
     /** 源码文件：按扩展名挑语言做语法高亮。 */
     /** Excel 表格：读 sharedStrings + sheet XML 转成表格块。 */
     XLSX,
+    /** PowerPoint（.pptx），ZIP+XML 容器。 */
+    PPTX,
     /** Office 97-2003 二进制格式，暂不支持解析。 */
     DOC_LEGACY,
     /**
@@ -40,7 +42,7 @@ enum class DocFormat {
 
     /** 是否由 ZIP + XML 容器解析（需要读包内图片）。 */
     val isContainer: Boolean
-        get() = this == EPUB || this == DOCX || this == ODT || this == XLSX
+        get() = this == EPUB || this == DOCX || this == ODT || this == XLSX || this == PPTX
 
     /** 是否支持全文搜索（PDF 走文字层提取，可能部分失败）。 */
     val supportsSearch: Boolean
@@ -80,6 +82,10 @@ enum class DocFormat {
                 "sql", "sh", "bash", "zsh", "ps1", "bat", "cmd", "gradle",
                 "groovy", "css", "scss", "less", "vue", "toml" -> CODE
                 "xlsx", "xlsm" -> XLSX
+                // .pptx 同样是 ZIP+XML：每张幻灯片一个 slideN.xml，文本在 a:t 里。
+                // .ppt（97-2003）是二进制复合文档，与 .doc 同类，暂不支持。
+                "pptx" -> PPTX
+                "ppt" -> DOC_LEGACY
                 "pdf" -> PDF
                 else -> null
             }

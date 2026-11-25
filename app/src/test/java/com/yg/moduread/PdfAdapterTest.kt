@@ -57,12 +57,30 @@ class PdfAdapterTest {
     }
 
     @Test
-    fun parseAddsOutlineAsHeadings() {
+    fun outlineIsNotInsertedIntoBody() {
+        // 目录（/Outlines）是导航索引，页面本身已把标题画进内容。
+        // 以前会把它插成 Heading 块，导致正文开头出现一大段重复标题（用户实测反馈）。
+        // 现在目录改由 LoadedDoc.outline 单独承载，不进正文。
         val pdf = ("%PDF-1.4\n1 0 obj <</Type /Page>> endobj\n" +
             "2 0 obj <</Outlines 3 0 R>> endobj\n" +
             "3 0 obj <</Title (Chapter One)>> endobj").toByteArray(Charsets.ISO_8859_1)
         val doc = PdfAdapter.parse(pdf)
-        assertTrue("应把 /Title 变成标题块", doc.blocks.any { it is MdBlock.Heading })
+        assertTrue("正文里不应出现目录标题块", doc.blocks.none { it is MdBlock.Heading })
+        assertTrue("仍应有页面块", doc.blocks.any { it is MdBlock.PdfPage })
+    }
+
+    @Test
+    fun outlineIsAvailableForNavigation() {
+        // 真实 PDF 的目录根必须从 Catalog 的 /Outlines 引用进来，
+        // 根对象自身没有 "/Outlines" 字样，而是 /First + /Next 链表。
+        val pdf = ("%PDF-1.4\n" +
+            "1 0 obj <</Type /Page>> endobj\n" +
+            "2 0 obj <</Type /Catalog /Outlines 3 0 R>> endobj\n" +
+            "3 0 obj <</Type /Outlines /First 4 0 R /Count 1>> endobj\n" +
+            "4 0 obj <</Title (Chapter One) /Dest [1 0 R /XYZ 0 0 0] /Parent 3 0 R>> endobj\n" +
+            "%%EOF").toByteArray(Charsets.ISO_8859_1)
+        val info = PdfAdapter.inspect(pdf)
+        assertTrue("目录应能从 inspect 拿到", info.outline.isNotEmpty())
     }
 
     private fun deflate(data: ByteArray): ByteArray {

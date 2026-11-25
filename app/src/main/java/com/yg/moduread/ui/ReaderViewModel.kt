@@ -185,7 +185,23 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             }.onSuccess { loaded ->
                 val saved = readProgress(uri)
                 // 目录与锚点表在这里一次算好，界面只管用，不在重组时装算
-                val toc = MdToc.build(loaded.blocks)
+                // 目录来源有两处：
+                //  - 正文里的 Heading 块（Markdown / DOCX / PPTX）
+                //  - PDF 的 /Outlines（正文里没有 Heading，只能靠它）
+                // 合并时 PDF 目录优先，因为它带真实层级。
+                val blockToc = MdToc.build(loaded.blocks)
+                val toc = if (loaded.outline.isNotEmpty()) {
+                    loaded.outline.mapIndexed { i, item ->
+                        val (page, lvl, title) = item
+                        com.yg.moduread.md.TocEntry(
+                            level = lvl.coerceIn(1, 6),
+                            text = title,
+                            // blockIndex 用真实页码：PDF 的第 page 页对应第 page 个 PdfPage 块
+                            blockIndex = page,
+                            slug = ""
+                        )
+                    }
+                } else blockToc
                 _sessions.update { list ->
                     list.map { session ->
                         if (session.id != id) session else session.copy(
@@ -204,7 +220,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                                 pageCount = loaded.pageCount,
                                 encrypted = loaded.encrypted,
                                 hasTextLayer = loaded.hasTextLayer,
-                            html = loaded.html,
+                                slides = loaded.slides,
                                 loading = false
                             )
                         )

@@ -66,8 +66,10 @@ fun TocSheet(
     // 只在首次组合时算一次 —— 抽屉里手动滚动后不该被拽回去。
     LaunchedEffect(shown, currentIndex) {
         if (shown.isEmpty()) return@LaunchedEffect
-        val at = shown.indexOfLast { it.blockIndex <= currentIndex }
-        if (at >= 0) listState.scrollToItem((at - 2).coerceAtLeast(0))
+        // 与高亮规则一致：当前页的**首个**条目
+        val at = shown.indexOfFirst { it.blockIndex >= currentIndex }
+        val target = if (at >= 0) at else shown.lastIndex
+        listState.scrollToItem((target - 2).coerceAtLeast(0))
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -103,8 +105,30 @@ fun TocSheet(
             // 当前所在章节 = 最后一个「起始块不晚于当前块」的标题。
             // 不能用 blockIndex == currentIndex 精确匹配：正文停在一个表格或代码块里时，
             // 那个位置根本不是任何标题的索引，精确匹配会导致整份目录一个都不高亮。
+            // 高亮规则：当前页停留的**第一个**条目。
+            //
+            // 多个目录项常指向同一页（PDF 很常见）。
+            // indexOfFirst 取该页首个条目，符合「我在这一页开头」的直觉；
+            // 找不到同页条目时退到「最后一个不超过当前页的条目」，
+            // 这样停在两章之间的正文里也能高亮到所属章节。
+            // 高亮规则：当前页停留的**第一个**条目。
+            //
+            // 多个目录项常指向同一页（PDF 很常见）。
+            // indexOfFirst 取该页首个条目，符合「我在这一页开头」的直觉；
+            // 找不到同页条目时退到「最后一个不超过当前页的条目」，
+            // 这样停在两章之间的正文里也能高亮到所属章节。
             val activeIndex = remember(shown, currentIndex) {
-                shown.indexOfLast { it.blockIndex <= currentIndex }
+                val same = shown.indexOfFirst { it.blockIndex == currentIndex }
+                if (same >= 0) {
+                    same
+                } else {
+                    val at = shown.indexOfFirst { it.blockIndex > currentIndex }
+                    when {
+                        at > 0 -> at - 1
+                        at == 0 -> 0
+                        else -> shown.lastIndex
+                    }
+                }
             }
 
             if (shown.isEmpty()) {
@@ -121,7 +145,12 @@ fun TocSheet(
             }
 
             LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 8.dp)) {
-                itemsIndexed(shown, key = { _, entry -> entry.blockIndex.toString() + ":" + entry.slug }) { index, entry ->
+                // key 必须全局唯一。
+                // PDF 目录里多个标题会指向同一页（blockIndex 相同），
+                // slug 又是空串，拼出来就是重复 key "6:"，
+                // LazyColumn 直接抛 IllegalArgumentException 闪退（用户实测）。
+                // 用列表下标保证唯一。
+                itemsIndexed(shown, key = { i, entry -> i.toString() + ":" + entry.blockIndex }) { index, entry ->
                     TocRow(
                         entry = entry,
                         active = index == activeIndex,
