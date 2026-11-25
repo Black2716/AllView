@@ -40,3 +40,12 @@ Thumbs.db
 
 # ---- 分发目录：APK 走 GitHub Release，不进版本历史 ----
 dist/
+
+# ---- 大体积测试样本（真实文档，不入库）----
+# 这些文件用于本地端到端验证，体积大且含真实内容。
+# 需要时从本地放回 sample/regress/ 即可，测试会自动跳过缺失的样本。
+sample/regress/*.pdf
+sample/regress/*.docx
+sample/regress/*.pptx
+!sample/regress/demo.pptx
+!sample/regress/withimg.docx
