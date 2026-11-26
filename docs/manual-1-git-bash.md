@@ -1,6 +1,6 @@
 # 手册一：Git Bash 终端操作（AllView）
 
-> 适用仓库：<https://github.com/Black2716/ModuRead>  
+> 适用仓库：<https://github.com/Black2716/AllView>  
 > 项目目录：`<本地项目目录路径>`（下文示例用 `E:/code/project/vibe/AllView`，换成你自己的路径即可）  
 > 终端：Windows「Git Bash」（开始菜单搜索 Git Bash；不要用 cmd 或 PowerShell 跑本文的 `export` 语法）
 
@@ -13,7 +13,7 @@
 ### 0.1 进入项目目录并确认身份
 
 ```bash
-cd /e/code/project/vibe/ModuReader      # 注意：Git Bash 里盘符写成 /e/ 而不是 E:/
+cd /e/code/project/vibe/AllView      # 注意：Git Bash 里盘符写成 /e/ 而不是 E:/
 git status -sb
 ```
 
@@ -74,8 +74,8 @@ git status -sb
 期望：
 
 ```
-origin  https://github.com/Black2716/ModuRead.git (fetch)
-origin  https://github.com/Black2716/ModuRead.git (push)
+origin  https://github.com/Black2716/AllView.git (fetch)
+origin  https://github.com/Black2716/AllView.git (push)
 ## main...origin/main
 ```
 
@@ -201,7 +201,7 @@ git push -u origin main
 期望输出：
 
 ```
-To https://github.com/Black2716/ModuRead.git
+To https://github.com/Black2716/AllView.git
    47f2587..1a2b3c4  main -> main
 ```
 
@@ -211,7 +211,7 @@ To https://github.com/Black2716/ModuRead.git
 
 ```
 ! [rejected]        main -> main (fetch first)
-error: failed to push some refs to 'https://github.com/Black2716/ModuRead.git'
+error: failed to push some refs to 'https://github.com/Black2716/AllView.git'
 ```
 
 处理：先同步再推（详见第 4 章）。
@@ -224,7 +224,7 @@ git push
 **B. 连不上 GitHub（本仓库最常见）**
 
 ```
-fatal: unable to access 'https://github.com/Black2716/ModuRead.git/':
+fatal: unable to access 'https://github.com/Black2716/AllView.git/':
 Failed to connect to github.com:443 after 21051 ms: Could not connect to server
 ```
 
@@ -308,7 +308,7 @@ git push origin v1.2.0
 期望：
 
 ```
-To https://github.com/Black2716/ModuRead.git
+To https://github.com/Black2716/AllView.git
  * [new tag]         v1.2.0 -> v1.2.0
 ```
 
@@ -356,7 +356,7 @@ gh release upload v1.2.0 "dist/AllView-1.2.0-release.apk" --clobber
 ```bash
 export GH_TOKEN=ghp_xxxxxxxxxxxxxxxx     # PAT，需要 repo + workflow 权限
 VERSION=1.2.0
-REPO=Black2716/ModuRead
+REPO=Black2716/AllView
 
 # 1) 建 Release（tag 必须已推送）
 curl -s -X POST \
@@ -572,7 +572,7 @@ git config --global credential.helper wincred
 
 ```bash
 # ✗ 把 token 拼进 remote URL（会永久留在 .git/config，还会被日志打印出来）
-git remote set-url origin https://ghp_xxx@github.com/Black2716/ModuRead.git
+git remote set-url origin https://ghp_xxx@github.com/Black2716/AllView.git
 
 # ✗ 写进 README / 脚本 / 任何会被提交的文件
 # ✗ 写进 gradle.properties、local.properties
@@ -623,7 +623,7 @@ unset GH_TOKEN
 
 ```bash
 # ── ① 进目录，确认起点干净 ────────────────────────
-cd /e/code/project/vibe/ModuReader
+cd /e/code/project/vibe/AllView
 git status -sb                    # 期望 ## main...origin/main
 git pull --rebase                 # 先同步，避免推不上去
 
@@ -655,7 +655,7 @@ gh release create v$VERSION "dist/AllView-$VERSION-release.apk" \
   --title "AllView $VERSION" --notes "本次改动摘要"
 
 # ── ⑨ 验收 ───────────────────────────────────────
-curl -sIL "https://github.com/Black2716/ModuRead/releases/download/v$VERSION/AllView-$VERSION-release.apk" \
+curl -sIL "https://github.com/Black2716/AllView/releases/download/v$VERSION/AllView-$VERSION-release.apk" \
   | grep -iE 'HTTP/|content-length'
 # 期望：HTTP/1.1 200 OK 且 content-length 与 dist 里文件大小一致
 ```

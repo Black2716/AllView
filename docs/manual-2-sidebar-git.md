@@ -337,7 +337,7 @@ main        当前分支
 
 ⑦ 复核
    终端：git log --oneline -1   →  与面板/网页一致
-   curl -sIL https://github.com/Black2716/ModuRead/commits/main | head -1  →  200
+   curl -sIL https://github.com/Black2716/AllView/commits/main | head -1  →  200
 ```
 
 走到 ⑥ 成功、⑦ 一致，就算不求助任何人完成了「提交 → push」。
@@ -400,11 +400,11 @@ main        当前分支
      --title "AllView $VERSION" --notes "本次改动摘要"
 
 ⑩ 验收（终端）
-   curl -sIL "https://github.com/Black2716/ModuRead/releases/download/v$VERSION/AllView-$VERSION-release.apk" \
+   curl -sIL "https://github.com/Black2716/AllView/releases/download/v$VERSION/AllView-$VERSION-release.apk" \
      | grep -iE 'HTTP/|content-length'
 
 ⑪ CI
-   浏览器：https://github.com/Black2716/ModuRead/actions  → 最新一次绿色 ✓
+   浏览器：https://github.com/Black2716/AllView/actions  → 最新一次绿色 ✓
 ```
 
 只想改代码不发版：做到 **⑥** 结束。

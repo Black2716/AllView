@@ -4,7 +4,7 @@
 #   ./publish.ps1
 $ErrorActionPreference = "Stop"
 if (-not $env:GITHUB_TOKEN) { throw "请先设置 GITHUB_TOKEN" }
-$repo = if ($env:REPO_NAME) { $env:REPO_NAME } else { "ModuRead" }
+$repo = if ($env:REPO_NAME) { $env:REPO_NAME } else { "AllView" }
 $api  = "https://api.github.com"
 $h = @{ Authorization = "Bearer $($env:GITHUB_TOKEN)"; Accept = "application/vnd.github+json" }
 

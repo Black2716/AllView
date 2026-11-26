@@ -2,7 +2,7 @@
 
 一个只做「读」的 Markdown 阅读器：打开本地 `.md`，专注排版，冷启动直达。
 
-[![Android Build](https://github.com/Black2716/ModuRead/actions/workflows/android.yml/badge.svg)](https://github.com/Black2716/ModuRead/actions/workflows/android.yml)
+[![Android Build](https://github.com/Black2716/AllView/actions/workflows/android.yml/badge.svg)](https://github.com/Black2716/AllView/actions/workflows/android.yml)
 
 | 项 | 值 |
 |---|---|
@@ -178,7 +178,7 @@ AllView/
 环境：JDK 17、Android SDK（platform 34 + build-tools 34.0.0）、Gradle 8.7（wrapper 自动下载）。
 
 ```bash
-git clone https://github.com/Black2716/ModuRead.git
+git clone https://github.com/Black2716/AllView.git
 cd AllView
 ```
 

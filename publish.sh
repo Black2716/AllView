@@ -7,7 +7,7 @@
 set -euo pipefail
 
 : "${GITHUB_TOKEN:?请先设置 GITHUB_TOKEN 环境变量}"
-REPO_NAME="${REPO_NAME:-ModuRead}"
+REPO_NAME="${REPO_NAME:-AllView}"
 PRIVATE="${PRIVATE:-false}"
 API="https://api.github.com"
 
