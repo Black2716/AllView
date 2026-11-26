@@ -11,12 +11,12 @@
 | 技术栈 | Kotlin + Jetpack Compose（Material 3） |
 | minSdk / targetSdk / compileSdk | 24 / 34 / 34 |
 | 解析内核 | commonmark-java 0.22.0 + GFM Tables |
-| 当前版本 | **1.2.0**（versionCode 2） |
+| 当前版本 | **1.2.1**（versionCode 3） |
 | release APK 实测体积 | **1.33 MB**（1,398,387 字节；R8 + 资源压缩，含 PPTX 表格/公式/图表渲染与 PDF 目录修复） |
 | debug APK 实测体积 | 7.8 MB（不裁剪，仅用于调试） |
 | 冷启动（Pixel 后端 API 34 模拟器，host GPU） | **302–505 ms**（`Displayed` 打点） |
 | 9.2 万字文档打开到首屏可读 | 约 3.4 s（含 `uiautomator` 轮询开销） |
-| 单测 | **198/198**（9 解析 + 8 公式 + 7 目录 + 6 最近文件 + 6 外部打开 + 7 搜索 + 8 高亮 + 4 纸张主题 + 8 任务列表 + 8 书签 + 7 文档路径 + 7 多开会话 + 5 路径回归 + 7 格式判定 + 12 文本解析 + 12 容器格式 + 14 PDF + 8 真实样本端到端 + 9 源码格式 + 45 PPTX/XLSX/表格对齐/嵌入图片等新增用例） |
+| 单测 | **249/249**（原有 198 条全部保留并通过；新增 44 条覆盖编解码、偏好/进度存储、会话 uri、错误文案、块 key、加载态映射，另 7 条覆盖大图采样解码 —— 详见 [docs/refactor-report.md](docs/refactor-report.md)） |
 
 ## 一、界面截图
 
@@ -208,15 +208,15 @@ Windows 用 `gradlew.bat`；本地无 Gradle 时 wrapper 会自行下载 8.7。
 版本号的**唯一来源**是 `app/build.gradle.kts`:
 
 ```kotlin
-versionCode = 2
-versionName = "1.2.0"
+versionCode = 3
+versionName = "1.2.1"
 ```
 
 发版流程（三处会自动对齐，无需手改文档里的版本串）：
 
 1. 改 `versionCode`（整数递增）与 `versionName`
 2. 在 [CHANGELOG.md](CHANGELOG.md) 顶部加一节
-3. 提交后打 tag 并推送：`git tag -a v1.2.0 -m "..." && git push origin v1.2.0`
+3. 提交后打 tag 并推送：`git tag -a v1.2.1 -m "..." && git push origin v1.2.1`
 
 推送 `v*` tag 会触发 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
 跑单测 → 构建 APK → 重命名为 `AllView-<版本>.apk` → 发布到 GitHub Release。

@@ -3,6 +3,30 @@
 版本号唯一来源是 `app/build.gradle.kts` 的 `versionName`。
 每次发版：改 `versionCode` + `versionName` → 提交 → 打 `v<版本>` tag → 推送 tag。
 
+## 1.2.1
+
+结构重构与 UI 缺陷修复，**对外行为零变更**：接口、配置键、输入输出、边界与异常行为全部与 1.2.0 一致。
+
+### 结构（不改行为）
+
+- `ReaderViewModel` 435 → 347 行：编解码、进度、偏好、会话 uri、错误文案、加载态映射各自独立成文件
+- `ReaderScreen` 720 → 339 行：只留滚动编排，浮层与底栏拆到 `ReaderChrome`，空态拆到 `EmptyView`
+- 4 处 `ModalBottomSheet` 样板收敛为 `AppSheet`；2 份测试用 `FakePrefs` 合并为一份
+- 新增 44 条回归测试，钉住重构前行为；原有 198 条一条未改
+
+### 修复（UI）
+
+- 大图按屏幕宽度采样解码，4000×3000 照片不再整图入堆（原约 48 MB，滚动即可能 OOM）
+- 标签关闭 ×、最近文件 ×、字号浮层 × 三处命中区放大到 48dp，并补 `contentDescription`
+- 空态页支持滚动，横屏/分屏不再裁掉"最近打开"末尾条目
+- 切换标签时目录高亮首帧即落在正确位置
+- 底栏高度从三处硬编码收敛为 `BottomBarHeight` / `ReaderBottomContentInset`
+
+### 内务
+
+- 测试 242 → **249**（新增 7 条覆盖采样算法）
+- 分析报告：[docs/refactor-report.md](docs/refactor-report.md)
+
 ## 1.2.0
 
 PPTX 渲染链路与 PDF 解析重做。
