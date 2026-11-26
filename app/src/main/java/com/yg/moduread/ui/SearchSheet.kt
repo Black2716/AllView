@@ -17,12 +17,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,14 +46,12 @@ import com.yg.moduread.md.SearchIndex
  * 搜索在 SearchIndex 上同步跑（一本书的纯文本约 60 KB，indexOf 是毫秒级），
  * 不需要协程也不需要在输入时防抖到奇怪的程度。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchSheet(
     index: SearchIndex?,
     onSelect: (SearchHit) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by remember { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<SearchHit>>(emptyList()) }
     val focus = remember { FocusRequester() }
@@ -66,7 +61,7 @@ fun SearchSheet(
         hits = if (query.isBlank() || index == null) emptyList() else index.search(query)
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    AppSheet(onDismiss = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
             OutlinedTextField(
                 value = query,

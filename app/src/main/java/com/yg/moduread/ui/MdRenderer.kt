@@ -42,7 +42,9 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -465,12 +467,18 @@ private fun TableRowView(
 @Composable
 private fun ImageView(block: MdBlock.Image, modifier: Modifier, docUri: String?) {
     val context = LocalContext.current
-    val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, block.url, docUri) {
+    // 目标宽度按屏宽算：图片最终按 ContentScale.FillWidth 铺满阅读区，
+    // 超出屏宽的像素解出来只会占内存，画面上看不出来。
+    // 采样率由 ImageSampling 计算（纯函数、可单测），解码走两遍：
+    // 第一遍 inJustDecodeBounds 只读尺寸，第二遍按 inSampleSize 真正解码。
+    val density = LocalDensity.current
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val targetWidthPx = with(density) { screenWidthDp.dp.roundToPx() }
+    val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(
+        null, block.url, docUri, targetWidthPx
+    ) {
         value = withContext(Dispatchers.IO) {
-            runCatching {
-                com.yg.moduread.data.MdImageResolver.open(context, docUri, block.url)
-                    ?.use { input -> BitmapFactory.decodeStream(input)?.asImageBitmap() }
-            }.getOrNull()
+            runCatching { decodeSampled(context, docUri, block.url, targetWidthPx) }.getOrNull()
         }
     }
     Column(modifier.fillMaxWidth().padding(vertical = 6.dp)) {
@@ -483,15 +491,17 @@ private fun ImageView(block: MdBlock.Image, modifier: Modifier, docUri: String?)
                 modifier = Modifier.fillMaxWidth().clip(Shapes.card)
             )
         } else {
+            // 13.sp / 12.dp 与 Type.body / Sp.m 是同一个值，换成令牌只为去掉散落的数字；
+            // 圆角 8.dp 仍在三档圆角之外，保持原值不动（改它属于视觉变更）。
             Text(
                 text = "图片未加载（仅支持本地图片）：" + block.url,
-                fontSize = 13.sp,
+                fontSize = Type.body,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(12.dp)
+                    .padding(Sp.m)
             )
         }
         if (block.alt.isNotBlank()) {
@@ -618,15 +628,57 @@ private fun buildCodeHighlight(
     }
 }
 
-/** 行内样式拼装：粗体/斜体/行内代码/链接由 AnnotatedString 承载。 */
+/**
+ * 行内样式拼装：粗体/斜体/行内代码/链接由 AnnotatedString 承载。
+ *
+ * remember 的理由：正文块每次重组（滚动、字号变化、主题切换）都会走到这里，
+ * 而 buildAnnotatedString 要遍历全部 inline 节点并逐个 push/pop 样式。
+ * 样式只由三个颜色决定，颜色不变时没必要重建同一份字符串。
+ * 注意 AnnotatedString 按内容比较，Text 本来就不会因此重绘 ——
+ * 这里省下的是每帧的对象分配与 GC 压力，不是重绘。
+ */
 @Composable
 fun buildInline(inlines: List<MdInline>): AnnotatedString {
     val linkColor = MaterialTheme.colorScheme.primary
     val codeBg = MaterialTheme.colorScheme.surfaceVariant
     val codeColor = MaterialTheme.colorScheme.onSurfaceVariant
-    return buildAnnotatedString {
-        appendInlines(inlines, linkColor, codeBg, codeColor)
+    return remember(inlines, linkColor, codeBg, codeColor) {
+        buildInline(inlines, linkColor, codeBg, codeColor)
     }
+}
+
+/** 纯函数版本：颜色由调用方给定，供上面缓存、也便于单独测试。 */
+internal fun buildInline(
+    inlines: List<MdInline>,
+    linkColor: Color,
+    codeBg: Color,
+    codeColor: Color
+): AnnotatedString = buildAnnotatedString {
+    appendInlines(inlines, linkColor, codeBg, codeColor)
+}
+
+/**
+ * 按目标宽度采样解码。
+ *
+ * 存在的理由：直接 decodeStream 会按原图尺寸分配像素，
+ * 4000x3000 的拍照图约 48MB，而显示区只有屏宽。
+ * 采样率取 2 的幂（BitmapFactory 的硬性要求），由 ImageSampling 统一计算；
+ * 取不到尺寸（outWidth <= 0，例如非图片流）时回落为 1，与改造前行为一致。
+ */
+private fun decodeSampled(
+    context: android.content.Context,
+    docUri: String?,
+    url: String,
+    targetWidthPx: Int
+): androidx.compose.ui.graphics.ImageBitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    com.yg.moduread.data.MdImageResolver.open(context, docUri, url)
+        ?.use { input -> BitmapFactory.decodeStream(input, null, bounds) }
+    val sample = com.yg.moduread.data.ImageSampling
+        .sampleSizeFor(bounds.outWidth, bounds.outHeight, targetWidthPx)
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    return com.yg.moduread.data.MdImageResolver.open(context, docUri, url)
+        ?.use { input -> BitmapFactory.decodeStream(input, null, options)?.asImageBitmap() }
 }
 
 private fun AnnotatedString.Builder.appendInlines(

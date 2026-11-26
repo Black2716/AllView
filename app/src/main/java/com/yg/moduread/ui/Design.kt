@@ -70,6 +70,25 @@ object Shapes {
     val sheet = RoundedCornerShape(topStart = Radius.m, topEnd = Radius.m)
 }
 
+/**
+ * 透明度分档。
+ *
+ * 存在的理由：改造前阅读界面的半透明都用裸浮点数
+ * （0.75 进度条、0.6 分隔线、0.35 置灰图标），同一个「很淡的灰」
+ * 在不同文件里可能写成 0.3、0.35 或 0.4，暗色主题下尤其容易花。
+ * 这里只保留实际用到的几档，值与原调用点逐一对应，不引入视觉变化。
+ */
+object Alpha {
+    /** 置灰：功能不可用，但文字仍需可读（约 1/3）。 */
+    const val faint = 0.35f
+
+    /** 分隔线、辅助线（约 3/5）。 */
+    const val soft = 0.6f
+
+    /** 进度条填充：比主色淡一档，避免喧宾夺主。 */
+    const val progress = 0.75f
+}
+
 /** 可交互元素的最小触摸边长（Material 规范 48dp）。 */
 val MinTouchTarget = 48.dp
 

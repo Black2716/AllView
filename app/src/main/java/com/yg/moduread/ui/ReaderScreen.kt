@@ -1,13 +1,10 @@
 package com.yg.moduread.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -16,52 +13,38 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import com.yg.moduread.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.debounce
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.yg.moduread.format.DocFormat
 import com.yg.moduread.md.MdBlock
+import com.yg.moduread.md.displayTitle
+import com.yg.moduread.md.keyHint
 import com.yg.moduread.md.plainText
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 
+/**
+ * 阅读器主界面：只负责**滚动编排**。
+ *
+ * 重构说明：外观部件（页首标题、顶栏、底栏、字号浮层、加载态）已拆到
+ * ReaderChrome.kt，空态页拆到 EmptyView.kt。本文件保留的是有状态的部分：
+ * 恢复位置、目录跳转、可见块上报、进度落盘节流、以及三种内容形态的分派。
+ * 这些逻辑的每条注释都记录着一个真实踩过的偏移量 bug，因此一律保留。
+ */
 @OptIn(FlowPreview::class)
 @Composable
 fun ReaderScreen(
@@ -90,9 +73,11 @@ fun ReaderScreen(
     jumpTarget: Int? = null,
     onJumpConsumed: () -> Unit = {}
 ) {
-    val bottomInsets = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
-    val listState = rememberLazyListState()
+    // 只取一次安全区：改造前这里连调两次 asPaddingValues()，
+    // 又另有一个 insets 变量，同一个值有三种取法，容易改漏。
     val insets = WindowInsets.safeDrawing.asPaddingValues()
+    val bottomInsets = insets.calculateBottomPadding()
+    val listState = rememberLazyListState()
     // 一级标题已作为页首大标题呈现，正文里去掉同一份，避免重复
     val body = remember(doc.blocks) {
         when {
@@ -250,10 +235,11 @@ fun ReaderScreen(
                         .fillMaxSize()
                         .graphicsLayer { alpha = contentAlpha },
                     contentPadding = PaddingValues(
-                        start = 20.dp,
-                        end = 20.dp,
+                        // 左右留白取令牌，改 ReaderGutter 即全站生效
+                        start = ReaderGutter,
+                        end = ReaderGutter,
                         top = 56.dp,
-                        bottom = 96.dp + insets.calculateBottomPadding()
+                        bottom = ReaderBottomContentInset + insets.calculateBottomPadding()
                     )
                 ) {
                     item(key = "title") {
@@ -278,443 +264,79 @@ fun ReaderScreen(
             }
         }
 
-                // 顶栏淡入淡出：用 animateFloatAsState 而不是 AnimatedVisibility，
-                // 后者会把 androidx.compose.animation 整包拖进 dex
-                val topBarAlpha by animateFloatAsState(
-                    targetValue = if (showBar) 1f else 0f,
-                    animationSpec = tween(150),
-                    label = "topBarAlpha"
-                )
-                if (topBarAlpha > 0.01f) {
-                    TopBar(
-                        title = currentTitle,
-                        progress = progress,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .graphicsLayer { alpha = topBarAlpha }
-                    )
-                }
-                // 进度线贴在底部栏正上方，2dp 高，不占布局高度（用 Box 叠放）
-                Box(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 52.dp + bottomInsets)
-                        .fillMaxWidth()
-                        .height(2.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth(progress)
-                            .fillMaxHeight()
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.75f))
-                    )
-                }
-
-                ReaderBottomBar(
-                    fontPanelOpen = fontPanelOpen,
-                    onToggleFontPanel = { fontPanelOpen = !fontPanelOpen },
-                    onOpenSettings = onOpenSettings,
-                    onOpenToc = onOpenToc,
-                    onOpenSearch = onOpenSearch,
-                    searchEnabled = doc.format.supportsSearch && doc.hasTextLayer,
-                    onOpenBookmarks = onOpenBookmarks,
-                    onPickFile = onPickFile,
-                    bottomPadding = bottomInsets,
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                )
-
-                // 字号浮层：从底部栏之上滑出，拖动即时生效。
-                // 用 animation-core 的 animateFloatAsState + graphicsLayer 而不是
-                // AnimatedVisibility —— 后者会把整个 androidx.compose.animation
-                // 模块拖进包体（实测约 +50 KB dex），而这个淡入淡出用 core 就够。
-                val panelAlpha by animateFloatAsState(
-                    targetValue = if (fontPanelOpen) 1f else 0f,
-                    animationSpec = tween(140),
-                    label = "fontPanelAlpha"
-                )
-                val panelShift by animateFloatAsState(
-                    targetValue = if (fontPanelOpen) 0f else 12f,
-                    animationSpec = tween(160),
-                    label = "fontPanelShift"
-                )
-                if (fontPanelOpen || panelAlpha > 0.01f) {
-                    Box(
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 52.dp + bottomInsets)
-                            .graphicsLayer { alpha = panelAlpha; translationY = panelShift }
-                    ) {
-                        FontPanel(
-                            fontSize = prefs.fontSizeSp,
-                            onFontChange = onFontChange,
-                            onDismiss = { fontPanelOpen = false }
-                        )
-                    }
-                }
-    }
-}
-
-@Composable
-private fun DocTitle(doc: DocumentState, fontSize: Float) {
-    Column(Modifier.fillMaxWidth().padding(bottom = 18.dp)) {
-        Text(
-            text = doc.blocks.displayTitle(doc.title),
-            fontSize = (fontSize * 1.85f).sp,
-            lineHeight = (fontSize * 1.85f * 1.3f).sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
+        // 顶栏淡入淡出：用 animateFloatAsState 而不是 AnimatedVisibility，
+        // 后者会把 androidx.compose.animation 整包拖进 dex
+        val topBarAlpha by animateFloatAsState(
+            targetValue = if (showBar) 1f else 0f,
+            animationSpec = tween(150),
+            label = "topBarAlpha"
         )
-        Spacer(Modifier.height(10.dp))
-        Box(
-            Modifier
-                .width(44.dp)
-                .height(3.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(MaterialTheme.colorScheme.primary)
-        )
-    }
-}
-
-@Composable
-private fun TopBar(title: String, progress: Float, modifier: Modifier) {
-    Column(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                fontSize = Type.caption,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = (progress * 100).toInt().toString() + "%",
-                fontSize = Type.caption,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        if (topBarAlpha > 0.01f) {
+            TopBar(
+                title = currentTitle,
+                progress = progress,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .graphicsLayer { alpha = topBarAlpha }
             )
         }
+        // 进度线贴在底部栏正上方，2dp 高，不占布局高度（用 Box 叠放）
         Box(
             Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = BottomBarHeight + bottomInsets)
                 .fillMaxWidth()
-                .height(1.dp)
-                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
-        )
-    }
-}
-
-/**
- * 底部栏：四个等距图标 + 一个低频项收进「⋯」。
- *
- * 改造前这里是六个同款文字胶囊（A- A+ 目录 搜索 设置 ... 换文件），
- * 没有主次也没有图标 —— 密集却没有信息量。现在：
- *  - 图标 24dp、触摸区 48dp，四个按钮视觉重量一致
- *  - 字号（低频）改成点「Aa」弹浮层，腾出两个按钮位
- *  - 「换文件」收进「⋯」，主栏从 6 项降到 4 项
- */
-@Composable
-private fun ReaderBottomBar(
-    fontPanelOpen: Boolean,
-    onToggleFontPanel: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenToc: () -> Unit,
-    onOpenSearch: () -> Unit,
-    searchEnabled: Boolean = true,
-    onOpenBookmarks: () -> Unit,
-    onPickFile: () -> Unit,
-    bottomPadding: androidx.compose.ui.unit.Dp,
-    modifier: Modifier
-) {
-    var moreOpen by remember { mutableStateOf(false) }
-
-    Column(modifier.fillMaxWidth()) {
-        // 发丝线：比改造前的 1dp outline(0.6f) 更淡，只做分隔不抢视线
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
+                .height(2.dp)
                 .background(MaterialTheme.colorScheme.outlineVariant)
-        )
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .padding(horizontal = Sp.s, vertical = Sp.xs)
-                .padding(bottom = bottomPadding),
-            verticalAlignment = Alignment.CenterVertically
         ) {
-            BarIcon(
-                label = "目录",
-                onClick = onOpenToc,
-                modifier = Modifier.weight(1f),
-                draw = { tint -> MiIcons.Toc(tint) }
+            Box(
+                Modifier
+                    .fillMaxWidth(progress)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = Alpha.progress))
             )
-            // PDF 与无文字层的扫描件没有搜索索引，入口置灰而不是静默失效
-            BarIcon(
-                label = "搜索",
-                onClick = { if (searchEnabled) onOpenSearch() },
-                modifier = Modifier.weight(1f),
-                dimmed = !searchEnabled,
-                draw = { tint -> MiIcons.Search(tint) }
-            )
-            BarIcon(
-                label = "字号",
-                onClick = onToggleFontPanel,
-                active = fontPanelOpen,
-                modifier = Modifier.weight(1f),
-                draw = { tint -> FontGlyph(tint) }
-            )
-            // 「⋯」下拉必须锚定到这个按钮本身。
-            // 直接放在 Column 里的话，锚点是整个 Column 的左上角，菜单会贴屏幕最左边。
-            Box(Modifier.weight(1f)) {
-                BarIcon(
-                    label = "更多",
-                    onClick = { moreOpen = true },
-                    active = moreOpen,
-                    modifier = Modifier.fillMaxWidth(),
-                    draw = { tint -> MiIcons.More(tint) }
-                )
-
-                // 低频操作都放这儿，不占用主栏
-                DropdownMenu(
-                    expanded = moreOpen,
-                    onDismissRequest = { moreOpen = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("换一个文件", fontSize = Type.bodyLarge) },
-                        onClick = { moreOpen = false; onPickFile() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("书签", fontSize = Type.bodyLarge) },
-                        onClick = { moreOpen = false; onOpenBookmarks() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("阅读设置", fontSize = Type.bodyLarge) },
-                        onClick = { moreOpen = false; onOpenSettings() }
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** 底部栏图标按钮：图标 24dp，触摸区撑到 48dp 高，点击标题可无障碍朗读。 */
-@Composable
-private fun BarIcon(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    active: Boolean = false,
-    /** 置灰：功能当前不可用（如 PDF 无搜索索引）。 */
-    dimmed: Boolean = false,
-    draw: @Composable (Color) -> Unit
-) {
-    val tint = when {
-        dimmed -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-        active -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    Box(
-        modifier
-            .height(MinTouchTarget)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center
-    ) {
-        draw(tint)
-    }
-}
-
-/** 字号图标用「Aa」字样，比画两个三角形更像约定的 UI 语言。 */
-@Composable
-private fun FontGlyph(tint: Color) {
-    Text(
-        text = MiIcons.FONT_LABEL,
-        fontSize = Type.bodyLarge,
-        fontWeight = FontWeight.Medium,
-        color = tint
-    )
-}
-
-/**
- * 字号浮层。改造前是两个常驻按钮 A-/A+；
- * 调字号是低频操作（一本书 1~2 次），不值得占两个主栏位置。
- */
-@Composable
-private fun FontPanel(
-    fontSize: Float,
-    onFontChange: (Float) -> Unit,
-    onDismiss: () -> Unit
-) {
-    // fillMaxWidth 之后 Box 的 align 不再居中生效，内容会贴在左侧 padding 边界上。
-    // 用 wrapContentWidth + 水平居中的 Row 让胶囊整体居中。
-    Row(
-        Modifier
-            .wrapContentWidth()
-            .clip(Shapes.card)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(horizontal = Sp.m, vertical = Sp.s),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = "A",
-            fontSize = Type.label,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Slider(
-            value = fontSize,
-            onValueChange = onFontChange,
-            valueRange = ReaderPrefs.MIN_FONT..ReaderPrefs.MAX_FONT,
-            steps = (ReaderPrefs.MAX_FONT - ReaderPrefs.MIN_FONT).toInt() - 1,
-            modifier = Modifier.weight(1f).padding(horizontal = Sp.s)
-        )
-        Text(
-            text = "A",
-            fontSize = Type.title,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.width(Sp.s))
-        Text(
-            text = fontSize.toInt().toString(),
-            fontSize = Type.caption,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.width(18.dp)
-        )
-        Box(
-            Modifier
-                .size(32.dp)
-                .clip(Shapes.pill)
-                .clickable(onClick = onDismiss),
-            contentAlignment = Alignment.Center
-        ) {
-            MiIcons.Close(MaterialTheme.colorScheme.onSurfaceVariant, 14.dp)
-        }
-    }
-}
-
-@Composable
-private fun LoadingView() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
-    }
-}
-
-@Composable
-private fun EmptyView(
-    error: String?,
-    recent: List<com.yg.moduread.data.RecentFile>,
-    onPickFile: () -> Unit,
-    onOpenRecent: (String) -> Unit,
-    onForgetRecent: (String) -> Unit
-) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 28.dp, vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = "AllView",
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = error ?: "打开本地文件开始阅读",
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(22.dp))
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.primary)
-                .clickable(onClick = onPickFile)
-                .padding(horizontal = 22.dp, vertical = 12.dp)
-        ) {
-            Text(text = "选择文件", fontSize = 15.sp, color = MaterialTheme.colorScheme.onPrimary)
         }
 
-        if (recent.isNotEmpty()) {
-            Spacer(Modifier.height(30.dp))
-            Text(
-                text = "最近打开",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
-            )
-            recent.forEach { file ->
-                RecentRow(
-                    file = file,
-                    onOpen = { onOpenRecent(file.uri) },
-                    onForget = { onForgetRecent(file.uri) }
+        ReaderBottomBar(
+            fontPanelOpen = fontPanelOpen,
+            onToggleFontPanel = { fontPanelOpen = !fontPanelOpen },
+            onOpenSettings = onOpenSettings,
+            onOpenToc = onOpenToc,
+            onOpenSearch = onOpenSearch,
+            searchEnabled = doc.format.supportsSearch && doc.hasTextLayer,
+            onOpenBookmarks = onOpenBookmarks,
+            onPickFile = onPickFile,
+            bottomPadding = bottomInsets,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+
+        // 字号浮层：从底部栏之上滑出，拖动即时生效。
+        // 用 animation-core 的 animateFloatAsState + graphicsLayer 而不是
+        // AnimatedVisibility —— 后者会把整个 androidx.compose.animation
+        // 模块拖进包体（实测约 +50 KB dex），而这个淡入淡出用 core 就够。
+        val panelAlpha by animateFloatAsState(
+            targetValue = if (fontPanelOpen) 1f else 0f,
+            animationSpec = tween(140),
+            label = "fontPanelAlpha"
+        )
+        val panelShift by animateFloatAsState(
+            targetValue = if (fontPanelOpen) 0f else 12f,
+            animationSpec = tween(160),
+            label = "fontPanelShift"
+        )
+        if (fontPanelOpen || panelAlpha > 0.01f) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = BottomBarHeight + bottomInsets)
+                    .graphicsLayer { alpha = panelAlpha; translationY = panelShift }
+            ) {
+                FontPanel(
+                    fontSize = prefs.fontSizeSp,
+                    onFontChange = onFontChange,
+                    onDismiss = { fontPanelOpen = false }
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun RecentRow(
-    file: com.yg.moduread.data.RecentFile,
-    onOpen: () -> Unit,
-    onForget: () -> Unit
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = 1.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onOpen)
-            .padding(horizontal = 10.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = file.name,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = relativeTime(file.openedAt),
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        // 长按才能移除太隐蔽，这里给一个显式的「×」
-        Text(
-            text = "×",
-            fontSize = 16.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .clickable(onClick = onForget)
-                .padding(horizontal = 10.dp, vertical = 4.dp)
-        )
-    }
-}
-
-/** 最近文件的时间显示：不引第三方时间库，按粗粒度分档。 */
-private fun relativeTime(epochMillis: Long): String {
-    val delta = System.currentTimeMillis() - epochMillis
-    if (delta < 0) return "刚刚"
-    val minute = 60_000L
-    val hour = 60 * minute
-    val day = 24 * hour
-    return when {
-        delta < minute -> "刚刚"
-        delta < hour -> (delta / minute).toString() + " 分钟前"
-        delta < day -> (delta / hour).toString() + " 小时前"
-        delta < 7 * day -> (delta / day).toString() + " 天前"
-        else -> (delta / (7 * day)).toString() + " 周前"
     }
 }

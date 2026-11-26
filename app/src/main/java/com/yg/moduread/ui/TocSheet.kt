@@ -20,12 +20,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +40,6 @@ import com.yg.moduread.md.TocEntry
  * 目录抽屉。material3 自带 ModalBottomSheet，不引入任何第三方抽屉库。
  * 长文档（书稿 115 个标题）用 LazyColumn 只渲染可见项。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TocSheet(
     entries: List<TocEntry>,
@@ -51,7 +47,6 @@ fun TocSheet(
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val listState = rememberLazyListState()
     var query by remember { mutableStateOf("") }
     val focus = remember { FocusRequester() }
@@ -72,7 +67,7 @@ fun TocSheet(
         listState.scrollToItem((target - 2).coerceAtLeast(0))
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    AppSheet(onDismiss = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp),

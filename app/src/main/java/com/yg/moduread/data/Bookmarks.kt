@@ -21,22 +21,21 @@ data class Bookmark(
  *
  * 与 RecentFiles 同一套路：SharedPreferences + 自定义分隔符序列化，
  * 不引 Gson 也不建数据库。单本文档的书签量级是个位数到几十条，够用。
+ *
+ * 编解码同样交给 [PrefsCodec]；这里只留「同一块只存一条、超出上限淘汰」
+ * 这类业务规则。
  */
 class Bookmarks(private val prefs: SharedPreferences) {
 
     fun list(uri: String): List<Bookmark> = all().filter { it.uri == uri }
 
-    fun all(): List<Bookmark> {
-        val raw = prefs.getString(KEY, null) ?: return emptyList()
-        if (raw.isEmpty()) return emptyList()
-        return raw.split(SEP_RECORD).mapNotNull { record ->
-            val f = record.split(SEP_FIELD)
+    fun all(): List<Bookmark> =
+        PrefsCodec.read(prefs, KEY, SEP_RECORD, SEP_FIELD).mapNotNull { f ->
             if (f.size < 4) return@mapNotNull null
             val idx = f[1].toIntOrNull() ?: return@mapNotNull null
             val at = f[3].toLongOrNull() ?: return@mapNotNull null
             Bookmark(uri = f[0], blockIndex = idx, excerpt = f[2], createdAt = at)
         }
-    }
 
     /** 同一块只留一条：重复加书签等价于「更新摘要与时间」。 */
     fun add(bookmark: Bookmark) {
@@ -53,11 +52,10 @@ class Bookmarks(private val prefs: SharedPreferences) {
     }
 
     private fun write(items: List<Bookmark>) {
-        val raw = items.joinToString(SEP_RECORD.toString()) {
-            listOf(it.uri, it.blockIndex.toString(), it.excerpt, it.createdAt.toString())
-                .joinToString(SEP_FIELD.toString())
-        }
-        prefs.edit().putString(KEY, raw).apply()
+        PrefsCodec.write(
+            prefs, KEY, SEP_RECORD, SEP_FIELD,
+            items.map { listOf(it.uri, it.blockIndex.toString(), it.excerpt, it.createdAt.toString()) }
+        )
     }
 
     companion object {

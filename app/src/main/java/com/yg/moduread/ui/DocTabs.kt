@@ -3,6 +3,7 @@ package com.yg.moduread.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -14,17 +15,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /**
  * 文档标签条。
@@ -66,6 +67,11 @@ fun DocTabs(
     }
 }
 
+// 标签条尺寸：30dp 是「单行 caption + 上下各 6dp 呼吸」的最小可用高度，
+// 160dp 保证标题能显示约 8 个汉字再省略。抽成常量让 TabChip 与关闭按钮共用同一份定义。
+private val TabChipHeight = 30.dp
+private val TabChipMaxWidth = 160.dp
+
 @Composable
 private fun TabChip(
     label: String,
@@ -75,15 +81,16 @@ private fun TabChip(
 ) {
     Row(
         Modifier
-            .height(30.dp)
-            .widthIn(max = 160.dp)
-            .clip(RoundedCornerShape(Radius.s))
+            .height(TabChipHeight)
+            .widthIn(max = TabChipMaxWidth)
+            // 形状取令牌，不再手写 RoundedCornerShape(Radius.s)：同一个圆角有两处定义迟早不同步
+            .clip(Shapes.chip)
             .background(
                 if (active) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.surfaceContainerHighest
             )
             .clickable(onClick = onClick)
-            .padding(start = Sp.s, end = 2.dp),
+            .padding(start = Sp.s),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -96,11 +103,18 @@ private fun TabChip(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false)
         )
+        // 【已标注的尺寸改动】关闭按钮命中区从约 20x16dp 撑到 48x30dp。
+        // 改造前是 12dp 图标 + 4/2dp 内边距 + 尾距 2dp，手指几乎点不中，
+        // 一按就落到标签本体上变成「切换到该文档」。图标尺寸、颜色、居中都不变；
+        // 代价是每个标签横向宽了约 22dp（原尾距被命中区吸收）。高度受标签条 30dp 约束，
+        // 取 48x30 而不再加高 —— 再高就会把标签条本身撑高。
         Box(
             Modifier
-                .clip(RoundedCornerShape(Radius.s))
+                .size(width = MinTouchTarget, height = TabChipHeight)
+                .clip(Shapes.chip)
                 .clickable(onClick = onClose)
-                .padding(horizontal = 4.dp, vertical = 2.dp)
+                .semantics { contentDescription = "关闭 " + label },
+            contentAlignment = Alignment.Center
         ) {
             MiIcons.Close(
                 tint = if (active) MaterialTheme.colorScheme.onPrimary

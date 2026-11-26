@@ -12,13 +12,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,7 +33,6 @@ import com.yg.moduread.R
  * 和目录/搜索用的 ModalBottomSheet 是两套观感（无拖拽手柄、圆角动画、遮罩浓度都不同）。
  * 现在统一成 ModalBottomSheet，三个面板同一套动效与遮罩。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSheet(
     prefs: ReaderPrefs,
@@ -45,8 +41,7 @@ fun SettingsSheet(
     onReadingThemeChange: (ReadingTheme) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    AppSheet(onDismiss = onDismiss) {
         Column(
             Modifier
                 .fillMaxWidth()

@@ -18,10 +18,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.yg.moduread.data.MdDocResolver
 import com.yg.moduread.format.DocFormat
 import com.yg.moduread.md.MdBlock
-import com.yg.moduread.md.plainText
+import com.yg.moduread.md.displayTitle
+import com.yg.moduread.md.keyHint
 
 @Composable
 fun ReaderRoot(vm: ReaderViewModel) {
@@ -39,7 +39,13 @@ fun ReaderRoot(vm: ReaderViewModel) {
     var bookmarksVisible by remember { mutableStateOf(false) }
     // 相对路径打不开时记下想去的文档，等用户在 SAF 里选完再核对
     val pendingDocLink = remember { mutableStateOf<String?>(null) }
-    val currentIndex = remember(activeId) { mutableStateOf(0) }
+    // 初值直接取该会话记下的可见块，而不是 0。
+    // 改造前是 remember(activeId) { mutableStateOf(0) }：切换文档时先回落成 0，
+    // 下一帧 LaunchedEffect 才补上真实位置，目录面板若正开着会看到高亮闪一下顶部。
+    // 取值与 LaunchedEffect 里的表达式完全一致，只是把「先错一帧再改」变成「一开始就对」。
+    val currentIndex = remember(activeId) {
+        mutableStateOf(sessions.firstOrNull { it.id == activeId }?.visibleBlock ?: 0)
+    }
 
     val context = LocalContext.current
     val imagePermission = if (android.os.Build.VERSION.SDK_INT >= 33) {
@@ -124,32 +130,19 @@ fun ReaderRoot(vm: ReaderViewModel) {
                 onOpenBookmarks = { bookmarksVisible = true },
                 onLongPressBlock = { blockIndex -> vm.addBookmark(blockIndex) },
                 onOpenPdfViewer = { bitmap, pageLabel -> pdfViewer = bitmap to pageLabel },
+                // 三条分支（锚点 / 兄弟文档 / 外部链接）的判定顺序集中在 dispatchLink 里
                 onLink = { url ->
-                    when {
-                        // 1) 文档内锚点
-                        url.startsWith("#") -> vm.resolveAnchor(url)?.let(vm::requestJump)
-                        // 2) 兄弟文档（.md 相对路径）—— B1 行为保持不变
-                        MdDocResolver.isRelativeDocLink(url) && MdDocResolver.isMarkdownPath(url) -> {
-                            val target = MdDocResolver.resolve(context, doc.docUri, url)
-                            if (target != null) {
-                                vm.open(target)
-                            } else {
-                                // 分区存储下未被授权过的兄弟文档读不到（平台限制）。
-                                // 回退到 SAF：用户选一次即拿到持久授权，之后再点就直接打开。
-                                pendingDocLink.value = url
-                                picker.launch(arrayOf("*/*"))
-                            }
+                    dispatchLink(
+                        url = url,
+                        context = context,
+                        docUri = doc.docUri,
+                        onAnchor = { anchor -> vm.resolveAnchor(anchor)?.let(vm::requestJump) },
+                        onOpenDocument = vm::open,
+                        onNeedsPicker = { link ->
+                            pendingDocLink.value = link
+                            picker.launch(arrayOf("*/*"))
                         }
-                        // 3) 其余交给系统浏览器
-                        else -> runCatching {
-                            context.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse(url)
-                                )
-                            )
-                        }
-                    }
+                    )
                 },
                 jumpTarget = vm.jumpTo.collectAsStateWithLifecycle().value,
                 onJumpConsumed = vm::consumeJump,
@@ -214,34 +207,4 @@ fun ReaderRoot(vm: ReaderViewModel) {
             )
         }
     }
-}
-
-/**
- * LazyColumn 的稳定 key 提示：类型 + 正文前 24 字。
- * 只用于 key，不做任何展示；同一位置内容变了 key 才变，滚动时不会误重组。
- */
-fun MdBlock.keyHint(): String = when (this) {
-    is MdBlock.Heading -> "h" + level + ":" + content.plainText().take(24)
-    is MdBlock.Para -> "p:" + content.plainText().take(24)
-    is MdBlock.CodeBlock -> "c:" + code.take(24)
-    is MdBlock.Math -> "m:" + latex.take(24)
-    is MdBlock.Image -> "i:" + url.take(24)
-    is MdBlock.Table -> "t:" + (head.firstOrNull()?.inlines?.plainText()?.take(16) ?: "")
-    is MdBlock.Quote -> "q"
-    is MdBlock.ListBlock -> "l:" + (items.firstOrNull()?.firstOrNull()?.let { b ->
-        when (b) {
-            is MdBlock.Para -> b.content.plainText().take(16)
-            else -> ""
-        }
-    } ?: "")
-    is MdBlock.Rule -> "r"
-    is MdBlock.EmbeddedImage -> "eb:" + alt.take(16)
-    is MdBlock.PdfPage -> "pg:" + pageIndex
-}
-
-/** 小工具：标题文本（首个一级标题优先，其次文件名）。 */
-fun List<MdBlock>.displayTitle(fallback: String): String {
-    val heading = firstOrNull { it is MdBlock.Heading && it.level <= 2 } as? MdBlock.Heading
-    val text = heading?.let { it.content.plainText() }
-    return text?.takeIf { it.isNotBlank() } ?: fallback
 }

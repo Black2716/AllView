@@ -5,28 +5,42 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.yg.moduread.data.DocRepository
 import com.yg.moduread.data.Bookmark
 import com.yg.moduread.data.Bookmarks
+import com.yg.moduread.data.DocRepository
+import com.yg.moduread.data.ProgressStore
 import com.yg.moduread.data.RecentFile
 import com.yg.moduread.data.RecentFiles
+import com.yg.moduread.data.SessionUris
+import com.yg.moduread.data.friendlyOpenError
 import com.yg.moduread.md.MdToc
 import com.yg.moduread.md.bookmarkExcerpt
-import com.yg.moduread.md.SearchIndex
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/**
+ * 阅读器的会话与状态中枢。
+ *
+ * 重构说明（行为未变，只改职责划分）：
+ *  - 偏好的读写 → [ReaderPrefsStore]（键名与默认值封在那边）
+ *  - 阅读位置的读写 → [ProgressStore]（hashCode 键、非负收敛）
+ *  - 多开 uri 列表的编解码 → [SessionUris]（保留 \n 兼容老数据）
+ *  - 打开失败的文案 → [friendlyOpenError]（纯映射，可单测）
+ * 这里只保留真正的会话编排：多开、切换、关闭、书签、跳转。
+ */
 class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = app.getSharedPreferences("moduread", Application.MODE_PRIVATE)
     private val recentFiles = RecentFiles(prefs)
     private val bookmarkStore = Bookmarks(prefs)
+    private val prefsStore = ReaderPrefsStore(prefs)
+    private val progressStore = ProgressStore(prefs)
 
     private val _recent = MutableStateFlow(recentFiles.list())
     val recent: StateFlow<List<RecentFile>> = _recent.asStateFlow()
@@ -52,7 +66,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     /** 活动会话的文档状态。没有会话时返回空态，界面逻辑无需判断 null。 */
     val doc: StateFlow<DocumentState> = combine(_sessions, _activeId) { list, id ->
         list.firstOrNull { it.id == id }?.doc ?: DocumentState()
-    }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, DocumentState())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, DocumentState())
 
     /** 活动会话。供需要 scroll 位置的地方取。 */
     private fun activeSession(): DocSession? = _sessions.value.firstOrNull { it.id == _activeId.value }
@@ -64,17 +78,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private val _readerPrefs = MutableStateFlow(
-        ReaderPrefs(
-            fontSizeSp = prefs.getFloat(KEY_FONT, 17f),
-            themeMode = runCatching {
-                ThemeMode.valueOf(prefs.getString(KEY_THEME, ThemeMode.SYSTEM.name)!!)
-            }.getOrDefault(ThemeMode.SYSTEM),
-            readingTheme = runCatching {
-                ReadingTheme.valueOf(prefs.getString(KEY_READING_THEME, ReadingTheme.PAPER.name)!!)
-            }.getOrDefault(ReadingTheme.PAPER)
-        )
-    )
+    private val _readerPrefs = MutableStateFlow(prefsStore.load())
     val readerPrefs: StateFlow<ReaderPrefs> = _readerPrefs.asStateFlow()
 
     private val _showSettings = MutableStateFlow(false)
@@ -114,8 +118,8 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         val uris = _sessions.value.mapNotNull { it.doc.docUri }
         val active = activeSession()?.doc?.docUri
         prefs.edit()
-            .putString(KEY_SESSION_URIS, uris.joinToString("\n"))
-            .putString(KEY_ACTIVE_URI, active)
+            .putString(SessionUris.KEY_SESSION_URIS, SessionUris.encode(uris))
+            .putString(SessionUris.KEY_ACTIVE_URI, active)
             .apply()
     }
 
@@ -135,19 +139,18 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         // 新版本优先恢复多开会话；老版本只存了单个 last_uri，走下面的兜底
-        val saved = prefs.getString(KEY_SESSION_URIS, null)
-        val uris = saved?.split("\n")?.filter { it.isNotBlank() }.orEmpty()
+        val uris = SessionUris.decode(prefs.getString(SessionUris.KEY_SESSION_URIS, null))
         if (uris.isNotEmpty()) {
             uris.forEach { s ->
                 runCatching { Uri.parse(s) }.getOrNull()?.let { open(it, silent = true, newTab = true) }
             }
             // 回到上次活动的那一本。此时各会话都在异步加载，docUri 还没落定，
             // 所以只记下目标，真正切换放到加载成功回调里做。
-            pendingActiveUri = prefs.getString(KEY_ACTIVE_URI, null)
+            pendingActiveUri = prefs.getString(SessionUris.KEY_ACTIVE_URI, null)
             return
         }
 
-        val last = prefs.getString(KEY_LAST_URI, null) ?: return
+        val last = prefs.getString(SessionUris.KEY_LAST_URI, null) ?: return
         runCatching { Uri.parse(last) }.getOrNull()?.let { open(it, silent = true) }
     }
 
@@ -164,7 +167,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             _activeId.value = existing.id
             // 复用一个已开的标签也是一次「切换」，同样要记住，
             // 否则重启后会回到上一个活动标签而不是这里
-            prefs.edit().putString(KEY_ACTIVE_URI, existing.doc.docUri).apply()
+            prefs.edit().putString(SessionUris.KEY_ACTIVE_URI, existing.doc.docUri).apply()
             return
         }
         openInNewSession(uri, silent)
@@ -183,50 +186,16 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             runCatching {
                 DocRepository.load(getApplication(), uri)
             }.onSuccess { loaded ->
-                val saved = readProgress(uri)
-                // 目录与锚点表在这里一次算好，界面只管用，不在重组时装算
-                // 目录来源有两处：
-                //  - 正文里的 Heading 块（Markdown / DOCX / PPTX）
-                //  - PDF 的 /Outlines（正文里没有 Heading，只能靠它）
-                // 合并时 PDF 目录优先，因为它带真实层级。
-                val blockToc = MdToc.build(loaded.blocks)
-                val toc = if (loaded.outline.isNotEmpty()) {
-                    loaded.outline.mapIndexed { i, item ->
-                        val (page, lvl, title) = item
-                        com.yg.moduread.md.TocEntry(
-                            level = lvl.coerceIn(1, 6),
-                            text = title,
-                            // blockIndex 用真实页码：PDF 的第 page 页对应第 page 个 PdfPage 块
-                            blockIndex = page,
-                            slug = ""
-                        )
-                    }
-                } else blockToc
+                val saved = progressStore.read(uri.toString())
+                // 目录、锚点表、搜索索引在这里一次算好，界面只管用，不在重组时装算。
+                // 具体的映射规则见 buildDocumentState。
+                val nextDoc = buildDocumentState(loaded, saved.first, saved.second)
                 _sessions.update { list ->
                     list.map { session ->
-                        if (session.id != id) session else session.copy(
-                            doc = DocumentState(
-                                title = loaded.title,
-                                blocks = loaded.blocks,
-                                charCount = loaded.charCount,
-                                baseDir = loaded.baseDir,
-                                docUri = loaded.docUri,
-                                restoreIndex = saved.first,
-                                restoreOffset = saved.second,
-                                toc = toc,
-                                anchors = MdToc.index(toc),
-                                searchIndex = SearchIndex.build(loaded.blocks),
-                                format = loaded.format,
-                                pageCount = loaded.pageCount,
-                                encrypted = loaded.encrypted,
-                                hasTextLayer = loaded.hasTextLayer,
-                                slides = loaded.slides,
-                                loading = false
-                            )
-                        )
+                        if (session.id != id) session else session.copy(doc = nextDoc)
                     }
                 }
-                prefs.edit().putString(KEY_LAST_URI, uri.toString()).apply()
+                prefs.edit().putString(SessionUris.KEY_LAST_URI, uri.toString()).apply()
                 recentFiles.remember(uri.toString(), loaded.title)
                 _recent.value = recentFiles.list()
                 _bookmarks.value = bookmarkStore.list(uri.toString())
@@ -250,13 +219,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                         ?.substringAfterLast('/')
                         ?.takeIf { it.isNotBlank() }
                         ?: "打开失败"
-                    updateDoc {
-                        it.copy(
-                            title = if (it.title.isBlank()) fallbackTitle else it.title,
-                            loading = false,
-                            error = friendlyError(e)
-                        )
-                    }
+                    updateDoc { failedDocumentState(it, fallbackTitle, friendlyOpenError(e)) }
                 }
             }
         }
@@ -268,46 +231,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun saveProgress(index: Int, offset: Int) {
         val uri = doc.value.docUri ?: return
-        val key = progressKey(uri)
-        prefs.edit()
-            .putInt(KEY_PROGRESS_INDEX + key, index)
-            .putInt(KEY_PROGRESS_OFFSET + key, offset)
-            .apply()
-    }
-
-    private fun readProgress(uri: Uri): Pair<Int, Int> {
-        val key = progressKey(uri.toString())
-        val index = prefs.getInt(KEY_PROGRESS_INDEX + key, 0)
-        val offset = prefs.getInt(KEY_PROGRESS_OFFSET + key, 0)
-        return index.coerceAtLeast(0) to offset.coerceAtLeast(0)
-    }
-
-    /** uri 可能很长，用 hashCode 做键；碰撞概率对「记住几本书的位置」这个用途无影响。 */
-    private fun progressKey(uri: String): String = uri.hashCode().toString()
-
-    /**
-     * 打开失败的原因翻译成人话。
-     * 系统抛的 SecurityException 是一大段英文加完整 uri，
-     * 直接摊在空态页上既看不懂也难看。
-     */
-    private fun friendlyError(e: Throwable): String {
-        val raw = e.message.orEmpty()
-        return when {
-            e is SecurityException || raw.contains("Permission Denial", true) ||
-                raw.contains("requires that you obtain access", true) ->
-                "这个文件没有被授权访问。\n点「选择文件」重新选一次即可（从外部打开时若被拒绝，也需要这样授权一次）。"
-
-            e is java.io.FileNotFoundException || raw.contains("No such file", true) ||
-                raw.contains("ENOENT", true) ->
-                "文件找不到了，可能已被移动或删除。"
-
-            raw.contains("EACCES", true) -> "没有读取该文件的权限。"
-
-            raw.isBlank() -> "打开失败，请重试。"
-
-            // 兜底：只保留第一行，避免长堆栈式文本铺满屏幕
-            else -> raw.lineSequence().firstOrNull()?.take(120) ?: "打开失败，请重试。"
-        }
+        progressStore.save(uri, index, offset)
     }
 
     fun forgetRecent(uri: String) {
@@ -317,21 +241,21 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearDocument() {
         _sessions.value = emptyList()
-        prefs.edit().remove(KEY_SESSION_URIS).apply()
+        prefs.edit().remove(SessionUris.KEY_SESSION_URIS).apply()
         _activeId.value = null
-        prefs.edit().remove(KEY_LAST_URI).apply()
+        prefs.edit().remove(SessionUris.KEY_LAST_URI).apply()
     }
 
     // ── 会话管理 ────────────────────────────────────────────────
 
     /** 切换活动会话。目标不存在时忽略。 */
     fun switchTo(id: Long) {
-        if (_sessions.value.none { it.id == id }) return
+        val target = _sessions.value.firstOrNull { it.id == id } ?: return
         _activeId.value = id
-        val uri = _sessions.value.first { it.id == id }.doc.docUri.orEmpty()
+        val uri = target.doc.docUri.orEmpty()
         _bookmarks.value = bookmarkStore.list(uri)
         // 记住上次停在哪一本，重启后回到它
-        prefs.edit().putString(KEY_ACTIVE_URI, uri).apply()
+        prefs.edit().putString(SessionUris.KEY_ACTIVE_URI, uri).apply()
     }
 
     /** 关闭一个会话。关掉活动会话时自动切到相邻的一个。 */
@@ -343,10 +267,9 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         _sessions.value = rest
         persistSessionUris()
         if (_activeId.value == id) {
-            _activeId.value = rest.getOrNull(index.coerceAtMost(rest.lastIndex))?.id
-            _bookmarks.value = bookmarkStore.list(
-                rest.getOrNull(index.coerceAtMost(rest.lastIndex))?.doc?.docUri.orEmpty()
-            )
+            val next = rest.getOrNull(index.coerceAtMost(rest.lastIndex))
+            _activeId.value = next?.id
+            _bookmarks.value = bookmarkStore.list(next?.doc?.docUri.orEmpty())
         }
     }
 
@@ -369,17 +292,17 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     fun setFontSize(size: Float) {
         val clamped = size.coerceIn(ReaderPrefs.MIN_FONT, ReaderPrefs.MAX_FONT)
         _readerPrefs.update { it.copy(fontSizeSp = clamped) }
-        prefs.edit().putFloat(KEY_FONT, clamped).apply()
+        prefsStore.saveFontSize(clamped)
     }
 
     fun setThemeMode(mode: ThemeMode) {
         _readerPrefs.update { it.copy(themeMode = mode) }
-        prefs.edit().putString(KEY_THEME, mode.name).apply()
+        prefsStore.saveThemeMode(mode)
     }
 
     fun setReadingTheme(theme: ReadingTheme) {
         _readerPrefs.update { it.copy(readingTheme = theme) }
-        prefs.edit().putString(KEY_READING_THEME, theme.name).apply()
+        prefsStore.saveReadingTheme(theme)
     }
 
     /** 给某个块加书签。同一块重复加会更新摘要与时间，不会重复。 */
@@ -420,16 +343,5 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSettingsVisible(visible: Boolean) {
         _showSettings.value = visible
-    }
-
-    private companion object {
-        const val KEY_FONT = "font_size"
-        const val KEY_THEME = "theme_mode"
-        const val KEY_READING_THEME = "reading_theme"
-        const val KEY_LAST_URI = "last_uri"
-        const val KEY_SESSION_URIS = "session_uris"
-        const val KEY_ACTIVE_URI = "active_uri"
-        const val KEY_PROGRESS_INDEX = "progress_index_"
-        const val KEY_PROGRESS_OFFSET = "progress_offset_"
     }
 }
