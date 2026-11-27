@@ -6,8 +6,17 @@ data class SearchHit(
     /** 块内命中起点（用于高亮）。 */
     val start: Int,
     val end: Int,
-    /** 命中所在的整块文本，供结果列表显示上下文。 */
-    val context: String
+    /**
+     * 命中附近的一段上下文（块首尾各留 [CONTEXT_PAD] 字），供结果列表展示。
+     *
+     * 改造前这里是「块开头的前 60 字」：同一块里出现两次关键词时，两条结果的
+     * 上下文都是块首，列表里长得一模一样，用户没法判断该点哪一条。
+     */
+    val context: String,
+    /** [context] 在块内的起始偏移；配合 [start] 可换算命中在 context 里的位置。 */
+    val contextOffset: Int = 0,
+    /** [context] 是否截掉了块尾（用于补省略号）。 */
+    val contextClippedEnd: Boolean = false
 )
 
 /**
@@ -43,12 +52,17 @@ class SearchIndex private constructor(
             if (blockIndex >= 0) {
                 val start = spans[blockIndex * 2]
                 val end = spans[blockIndex * 2 + 1]
+                // 上下文窗口围绕这一次命中的位置切，不固定在块首
+                val ctxFrom = (at - CONTEXT_PAD).coerceAtLeast(start)
+                val ctxTo = (at + needle.length + CONTEXT_PAD).coerceAtMost(end)
                 hits.add(
                     SearchHit(
                         blockIndex = blockIndex,
                         start = at - start,
                         end = at - start + needle.length,
-                        context = text.substring(start, minOf(end, start + CONTEXT_LEN)).replace('\n', ' ')
+                        context = text.substring(ctxFrom, ctxTo).replace('\n', ' '),
+                        contextOffset = ctxFrom - start,
+                        contextClippedEnd = ctxTo < end
                     )
                 )
             }
@@ -77,7 +91,8 @@ class SearchIndex private constructor(
     companion object {
         /** 单字符查询太吵（"的" 能出几千条），至少两个字符。 */
         const val MIN_QUERY = 2
-        private const val CONTEXT_LEN = 60
+        /** 命中点两侧各取多少个字作为列表里的上下文。 */
+        const val CONTEXT_PAD = 40
 
         fun build(blocks: List<MdBlock>): SearchIndex {
             val sb = StringBuilder()

@@ -122,7 +122,7 @@ private fun HitRow(hit: SearchHit, query: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = highlighted(snippet(hit, query), query, highlight, accent),
+            text = highlighted(searchSnippet(hit), query, highlight, accent),
             fontSize = Type.body,
             lineHeight = (Type.body.value * 1.5f).sp,
             color = MaterialTheme.colorScheme.onSurface,
@@ -135,19 +135,20 @@ private fun HitRow(hit: SearchHit, query: String, onClick: () -> Unit) {
     }
 }
 
-/** 上下文里把关键词两侧截出固定窗口，避免长段落把列表撑爆。 */
-private fun snippet(hit: SearchHit, query: String): String {
+/**
+ * 上下文里把关键词两侧截出固定窗口，避免长段落把列表撑爆。
+ *
+ * 窗口必须围绕**这一条命中**的位置（[SearchHit.start]），不能从块首重新找关键词：
+ * 同一个块里出现三次 "torch" 时，从块首找只会得到同一段文字，三条结果长得一模一样，
+ * 用户没法判断该点哪一条。
+ */
+internal fun searchSnippet(hit: SearchHit): String {
     val ctx = hit.context
-    val len = query.length.coerceAtLeast(1)
-    // context 是块开头的截断文本，命中点可能不在里面，这时退化为块首
-    val at = ctx.indexOf(query, ignoreCase = true)
-    return if (at < 0) {
-        ctx.take(50)
-    } else {
-        val from = (at - 18).coerceAtLeast(0)
-        val to = (at + len + 32).coerceAtMost(ctx.length)
-        (if (from > 0) "…" else "") + ctx.substring(from, to) + (if (to < ctx.length) "…" else "")
-    }
+    if (ctx.isEmpty()) return ""
+    // context 已经是围绕这次命中切好的窗口，前面是否省略看 contextOffset
+    val head = if (hit.contextOffset > 0) "…" else ""
+    val tail = if (hit.contextClippedEnd) "…" else ""
+    return head + ctx + tail
 }
 
 /**
