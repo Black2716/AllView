@@ -2,6 +2,7 @@ package com.yg.moduread.ui
 
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -18,6 +19,11 @@ import androidx.compose.runtime.Composable
  * 收敛后：面板内容只描述「显示什么」，呈现方式只有这一个实现。
  * skipPartiallyExpanded = true 是刻意的 —— 这四个面板都是列表/表单，
  * 半展开态下只能看到两三行，没有使用价值。
+ *
+ * 2026-11：补齐 shape / containerColor / scrimColor / dragHandle。
+ * 改造前这四个参数全用 M3 默认（顶部 28dp 圆角 + 默认遮罩），
+ * 与 Design.kt 里 Shapes.sheet=12dp 的定义互相矛盾 —— 面板圆角因此
+ * 比卡片圆角大一倍多，观感割裂。现在面板圆角来自 Unified 令牌。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,5 +32,14 @@ fun AppSheet(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, content = content)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = Shapes.sheet,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.42f),
+        dragHandle = { SheetDragHandle() },
+        content = content
+    )
 }
