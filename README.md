@@ -1,6 +1,8 @@
 # AllView · 轻量级多格式阅读器
 
-一个只做「读」的 Markdown 阅读器：打开本地 `.md`，专注排版，冷启动直达。
+一个只做「读」的多格式阅读器：打开本地文件，专注排版，冷启动直达。
+支持 Markdown、纯文本/日志、CSV/JSON/XML/YAML/INI、字幕、RTF、HTML、EPUB、Word、Excel、PowerPoint、PDF 与源码，全部本地解析，
+不联网、不要账号、没有广告。
 
 [![Android Build](https://github.com/Black2716/AllView/actions/workflows/android.yml/badge.svg)](https://github.com/Black2716/AllView/actions/workflows/android.yml)
 
@@ -11,12 +13,13 @@
 | 技术栈 | Kotlin + Jetpack Compose（Material 3） |
 | minSdk / targetSdk / compileSdk | 24 / 34 / 34 |
 | 解析内核 | commonmark-java 0.22.0 + GFM Tables |
-| 当前版本 | **1.2.1**（versionCode 3） |
+| 当前版本 | **1.3.0**（versionCode 4） |
 | release APK 实测体积 | **1.33 MB**（1,398,387 字节；R8 + 资源压缩，含 PPTX 表格/公式/图表渲染与 PDF 目录修复） |
 | debug APK 实测体积 | 7.8 MB（不裁剪，仅用于调试） |
 | 冷启动（Pixel 后端 API 34 模拟器，host GPU） | **302–505 ms**（`Displayed` 打点） |
 | 9.2 万字文档打开到首屏可读 | 约 3.4 s（含 `uiautomator` 轮询开销） |
-| 单测 | **249/249**（原有 198 条全部保留并通过；新增 44 条覆盖编解码、偏好/进度存储、会话 uri、错误文案、块 key、加载态映射，另 7 条覆盖大图采样解码 —— 详见 [docs/refactor-report.md](docs/refactor-report.md)） |
+| 单测 | **258/258**（原有 198 条全部保留并通过；44 条覆盖编解码、偏好/进度存储、会话 uri、错误文案、块 key、加载态映射，7 条覆盖大图采样解码，9 条覆盖设计令牌与展示文案 —— 详见 [docs/refactor-report.md](docs/refactor-report.md)） |
+| 设计规范 | [docs/design-system.md](docs/design-system.md)（颜色 / 字阶 / 间距 / 圆角 / 图标 / 动效 / 无障碍 / 逐屏规范） |
 
 ## 一、界面截图
 
@@ -111,22 +114,71 @@ AllView/
         │       │   ├── RecentFiles.kt          # 最近 8 本，无数据库
         │       │   └── MdImageResolver.kt      # 相对路径图片定位（本地）
         │       └── ui/
-        │           ├── Theme.kt                # 浅/深双主题 + 系统栏反色
+        │           ├── Design.kt               # 设计令牌：间距/圆角/字阶/透明度/动效
+        │           ├── Theme.kt                # 明暗双主题 + 纸张主题 + M3 字体与形状
+        │           ├── Components.kt           # 公共件：卡片/胶囊/按钮/输入框/空态
+        │           ├── Icons.kt                # 20 个 Canvas 直绘图标（不引矢量库）
         │           ├── ReaderState.kt          # DocumentState / ReaderPrefs
         │           ├── ReaderViewModel.kt      # 状态 + 偏好持久化
         │           ├── ReaderRoot.kt           # SAF 选择器 + 页面装配
+        │           ├── HomeScreen.kt           # 首页：品牌 + 主操作 + 最近文件
         │           ├── ReaderScreen.kt         # LazyColumn 阅读主界面
+        │           ├── ReaderChrome.kt         # 顶栏 / 底栏 / 字号浮层 / 加载态
+        │           ├── DocTabs.kt              # 多文档标签条
         │           ├── MdRenderer.kt           # 块级渲染器（全部元素）
-        │           ├── TocSheet.kt             # 目录抽屉（ModalBottomSheet）
-        │           ├── SearchSheet.kt          # 搜索面板（命中列表 + 跳转）
-        │           └── SettingsSheet.kt        # 字号 / 外观面板
+        │           ├── AppSheet.kt             # 底部面板统一外壳
+        │           ├── TocSheet.kt             # 目录面板（ModalBottomSheet）
+        │           ├── SearchSheet.kt          # 搜索面板（命中列表 + 高亮 + 跳转）
+        │           ├── BookmarkSheet.kt        # 书签面板
+        │           └── SettingsSheet.kt        # 字号 / 外观 / 纸张面板
         └── test/java/com/yg/moduread/
             ├── MdParserTest.kt                 # 9 个解析单测（含真实长文）
             ├── LatexTest.kt                    # 8 个公式单测
             ├── MdTocTest.kt                    # 7 个目录单测（含书稿 11 锚点真值）
             ├── RecentFilesTest.kt              # 6 个最近文件单测
-            └── ExternalOpenTest.kt             # 6 个外部打开判据单测
+            ├── ExternalOpenTest.kt             # 6 个外部打开判据单测
+            ├── DesignTokensTest.kt             # 9 个设计令牌 / 展示文案单测
+            └── ……共 35 个测试类、258 条用例
 ```
+
+## 一·五、界面与设计系统
+
+1.3.0 把界面重做了一遍：不换功能，只把"能读"变成"好读"。
+完整约定见 [docs/design-system.md](docs/design-system.md)，这里只列看得见的变化。
+
+### 双套设计系统合并
+
+改造前 `Design.kt` 里有 `Sp` / `Radius` / `Type` 令牌，而 `MaterialTheme` 用的是默认 `Shapes`（4/8/12/28dp）与默认为 `Typography`，
+同一个界面里并存两种圆角、两套字阶。现在 `AppShapes` 与 `AppTypography` 把令牌交给 M3，
+`Slider` / `DropdownMenu` / `ModalBottomSheet` 与自绘组件圆角字阶完全一致。
+
+### 首页取代空态
+
+未打开文档时不再是"一行标题 + 一个按钮"，而是完整首页：品牌头、主操作按钮、
+最近打开卡片列表（类型徽标 + 格式 + 相对时间 + 删除键）、可打开格式说明。错误也改成页内横幅，不弹窗打断。
+
+### 阅读器
+
+- 进度条只保留一条（底栏顶部 2dp 轨道），改造前顶栏百分比与独立进度线是两套数据源。
+- 顶栏高度、底栏高度、正文底部留白收成三个常量；改造前 52dp 散在三处。
+- 底栏四项有选中底色与图标变色，不再只换颜色；字号浮层加 `A-` / `A+` 微调键。
+- 页首元信息补上格式与字数（"Markdown · 12,345 字"）。
+
+### 面板
+
+目录 / 搜索 / 书签 / 设置四类面板统一为：拖拽条 → 标题 + 计数 + 关闭键 → 内容。
+搜索命中片段做关键词高亮并按块号标注；目录当前项带语义标记；
+纸张/外观改用带对勾的 `ChoiceChip` 并补 `Role.RadioButton`。
+
+### 触摸与无障碍
+
+所有可点元素 ≥ 48dp（改造前标签关闭键 30×20dp、书签删除键约 30dp、标签条整体 30dp 高），
+图标按钮全部带 `contentDescription`，固定行高改 `heightIn(min=)` 以支持系统字体放大 1.3 倍。
+
+### 图标
+
+自绘图标从 6 个补到 20 个（返回、勾选、书签、文件、文件夹、日/月、纸张、字号增减、删除、堆叠等），
+仍是 `Canvas` 直绘，不引入矢量库——release 体积量级不变。
 
 ## 二·五、支持的文件格式
 
@@ -208,15 +260,15 @@ Windows 用 `gradlew.bat`；本地无 Gradle 时 wrapper 会自行下载 8.7。
 版本号的**唯一来源**是 `app/build.gradle.kts`:
 
 ```kotlin
-versionCode = 3
-versionName = "1.2.1"
+versionCode = 4
+versionName = "1.3.0"
 ```
 
 发版流程（三处会自动对齐，无需手改文档里的版本串）：
 
 1. 改 `versionCode`（整数递增）与 `versionName`
 2. 在 [CHANGELOG.md](CHANGELOG.md) 顶部加一节
-3. 提交后打 tag 并推送：`git tag -a v1.2.1 -m "..." && git push origin v1.2.1`
+3. 提交后打 tag 并推送：`git tag -a v1.3.0 -m "..." && git push origin v1.3.0`
 
 推送 `v*` tag 会触发 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
 跑单测 → 构建 APK → 重命名为 `AllView-<版本>.apk` → 发布到 GitHub Release。
@@ -231,10 +283,10 @@ adb push sample/demo.md   /sdcard/Download/
 adb push sample/pic.png   /sdcard/Download/
 ```
 
-1. 启动应用，首屏为空态：「AllView / 打开一个本地文件开始阅读 / 选择文件」。
-2. 点「选择文件」→ 系统 SAF → 选择 `sample.md`，顶部大标题 + 正文同步出现。
+1. 启动应用，首屏为首页：「AllView / 本地文档阅读器 · 无需联网 / 打开文件」，下方是最近打开列表与可打开格式说明。
+2. 点「打开文件」→ 系统 SAF → 选择 `sample.md`，顶部大标题 + 正文同步出现。
 3. 按元素检查（`demo.md` 覆盖全部元素）：标题、段落、嵌套有序/无序列表、引用块（含嵌套引用）、代码块（语言标签 `python`、横向滚动）、4 列表格、图片、链接、分隔线。
-4. 点底部 `A-` / `A+`：字号 13–26sp 逐级变化，正文立即重排，不重新解析。
+4. 点底栏「字号」→ 浮层里的 `A-` / `A+`：字号 13–26sp 逐级变化，正文立即重排，不重新解析。
 5. 「设置」→ 滑杆调字号；「外观」切换 跟随系统 / 浅色 / 深色，立即生效且状态栏图标反色。
 6. 杀进程重开：自动续读上次文件（SAF 持久化授权）；重装后首次启动为空态。
 7. 若文档含本地图片，首次打开会申请 `READ_MEDIA_IMAGES`（Android 13+）/ 存储权限；拒绝时图片降级为占位条，正文不受影响。

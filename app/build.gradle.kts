@@ -11,8 +11,8 @@ android {
         applicationId = "com.yg.moduread"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
     }
 
     buildTypes {

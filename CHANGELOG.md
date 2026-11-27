@@ -3,6 +3,62 @@
 版本号唯一来源是 `app/build.gradle.kts` 的 `versionName`。
 每次发版：改 `versionCode` + `versionName` → 提交 → 打 `v<版本>` tag → 推送 tag。
 
+## 1.3.0
+
+界面全面重塑，**功能与数据零变更**：格式支持、解析结果、交互路径、存储键、`applicationId` 全部与 1.2.1 一致。
+
+设计约定与逐屏规范见 [docs/design-system.md](docs/design-system.md)。
+
+### 设计系统
+
+- 颜色、字阶、形状交给 `MaterialTheme`：新增 `AppTypography`（12 档）与 `AppShapes`，
+  M3 组件的圆角与字阶和自绘组件统一（改造前是两套并存）
+- 令牌补齐：`Radius.l`、`Type.heading`、`Elevation`、`Motion`、`Hairline`、`SheetListMaxHeight`，
+  透明度收成 9 档语义令牌（`faint` / `disabled` / `selected` / `soft` / `decorative` / `hairline` / `progress` / `overlay` / `scrim`），
+  组件里不再出现裸浮点数
+- 纸张主题补齐：米黄与夜间两套现在覆盖 `primary` / `primaryContainer` / `outline` 系，
+  深色模式不再在暖纸底上露出冷蓝
+- 状态栏图标按背景亮度反色，修掉"浅色模式 + 夜间纸时图标看不见"
+
+### 首页（新）
+
+- `HomeScreen` 取代原空态页：品牌头 + 主操作 + 最近打开卡片列表 + 格式说明，整页可滚动
+- 最近文件卡片带类型徽标（MD / PDF / PPT / XLS…）、格式名与相对时间，删除键 48dp
+- 打开失败改为页内错误横幅（`errorContainer`），不再挤占主按钮位置
+
+### 阅读器
+
+- 进度线合并为一条：底栏顶部 2dp 轨道，带 `tween` 过渡；顶栏百分比与它同源
+- `ReaderTopBarHeight` (56dp) / `BottomBarHeight` (52dp) / `ReaderBottomContentInset` (96dp) 三个常量统一各处的隐式契约
+- 页首元信息新增格式名与字数（"PDF · 24 页" / "Markdown · 12,345 字"）
+- 底栏活跃项加 `primaryContainer` 底色，字号浮层加 `A-` / `A+`（40dp）与当前值
+- 加载态加文案（"正在解析文档"）
+
+### 面板
+
+- `AppSheet` 显式指定形状、容器色、遮罩透明度与拖拽条
+- 四类面板统一结构：`SheetDragHandle` → `SheetHeader`（标题 + 计数 + 关闭）→ 内容
+- 目录：行高 ≥ 48dp、当前项 `primaryContainer` 底 + "当前章节"语义、缩进改用令牌
+- 搜索：命中片段关键词高亮（最多 20 处）、块号徽标、四类空态各有文案；输入框换成 `SearchField`
+- 书签：卡片化、删除键 48dp 且带描述、左侧主色标记条
+- 设置：三张 `SettingCard`（字号 / 外观 / 纸张），外观与纸张用带对勾的 `ChoiceChip`
+
+### 标签条与浮层
+
+- 标签高 30dp → 48dp，关闭键独立 48×48dp 命中区，激活态换 `primaryContainer`，加 `Role.Tab` 语义
+- 幻灯片：留白与正文对齐、卡片改描边、页码做成胶囊
+- PDF 全屏看图：顶部信息条 + 明确的关闭键
+
+### 图标
+
+- 自绘图标 6 → 20 个（`Back`/`Chevron`/`Check`/`Tune`/`Bookmark`/`File`/`Folder`/`Sun`/`Moon`/`Paper`/`FontMinus`/`FontPlus`/`Trash`/`Stack`/`SearchOff` 等），仍是 `Canvas` 直绘
+- `IconAction` 把 `contentDescription` 变成必填参数
+
+### 内务
+
+- 测试 249 → **258**（新增 `DesignTokensTest`：令牌单调性、透明度区间、48dp 触摸目标、相对时间与字数文案、格式名覆盖）
+- 新增 [docs/design-system.md](docs/design-system.md)
+
 ## 1.2.1
 
 结构重构与 UI 缺陷修复，**对外行为零变更**：接口、配置键、输入输出、边界与异常行为全部与 1.2.0 一致。
