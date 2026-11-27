@@ -3,7 +3,8 @@
 > 项目：`E:/code/project/vibe/AllView`（原 ModuReader，包名 `com.yg.moduread` 保持不变）
 > 目标：在不改变任何对外行为的前提下完成结构解耦、消除重复。
 > 验收基线：重构前 `./gradle :app:testDebugUnitTest` = **198 tests / 26 suites / 0 failures**；
-> 重构后同命令 = **249 tests / 34 suites / 0 failures**（新增 51 条全部是"钉住旧行为"的回归测试）。
+> 重构后同命令 = **264 tests / 36 suites / 0 failures**（新增 66 条全部是"钉住旧行为"的回归测试）。
+> 三批依次为：结构重构（+44）、UI 缺陷修复（+7）、界面重塑（+15）。
 > 其中第一批结构重构新增 44 条，第二批 UI 缺陷修复新增 7 条 `ImageSamplingTest`。
 
 ---
@@ -309,4 +310,84 @@ JAVA_HOME='D:\jdk17' /d/gradle/gradle-8.7/bin/gradle :app:testDebugUnitTest :app
 | 裸透明度残留复查 | 仅剩 `MathView` 的尺寸比例系数与 `PdfPageSlot` 的 `LinkedHashMap` loadFactor，均非颜色，故不动 |
 
 手动回归仍按 §3.3 的 25 条路径执行；本批额外盯 4 点：① 打开一张手机原图尺寸的图片，滚动不崩、显示清晰；② 标签条关闭 × / 最近文件 × / 字号浮层 × 三处点按手感变宽，图标位置不变；③ 横屏打开空态页可滚动到"最近打开"最后一条；④ 切换标签时目录高亮从第一帧起就在正确位置。
+
+## 六、第三批：界面全面重塑（1.3.0 / 1.3.1）
+
+前两批解决的是"结构"与"缺陷"，界面本身没动过。这一批只改视觉与体验层：
+**不新增功能、不改交互路径、不改解析结果、不改存储键、不改 `applicationId`**。
+
+### 6.1 诊断：界面为什么像"上个年代"
+
+逐屏读完全部 45 个 main 源文件后，问题归成 12 类（每条都定位到文件与行号，完整清单见 §6.2 的对照表）：
+
+| # | 现象 | 根因 |
+|---|---|---|
+| 1 | 同一屏里两种圆角、两套字阶 | `Design.kt` 有 `Sp`/`Radius`/`Type` 令牌，但 `MaterialTheme` 用的是默认 `Shapes`(4/8/12/28dp) 与默认 `Typography`，两套并行 |
+| 2 | 裸值密集 | `EmptyView` 一处就写了 28/32/10/22/30/24/12/10/8/6dp + 30/14/15/12/11sp；`TocSheet` 20/8/12/14/2/1/9dp；`DocTitle` 18/44/3/2dp |
+| 3 | 触摸区普遍不足 48dp | 标签条 30dp、目录行 36dp、主题 chip 36dp、书签删除键 30dp、最近文件行 40dp |
+| 4 | 没有按压/选中反馈 | `BarIcon` 只换 tint；`ThemeChip`/`PaperChip` 只换底色；四个列表行都是裸 `clickable` |
+| 5 | 三态（空/加载/错误）不一致 | `LoadingView` 只有转圈无文案；三处面板各写一套空态 Box+Text，内边距 26/24/24dp 不一 |
+| 6 | 输入框风格割裂 | 目录与搜索用 M3 默认描边 `OutlinedTextField`，其余界面是填充卡片风格 |
+| 7 | 纸感主题露冷蓝 | `withPaper` 只覆盖 `background`/`surface` 系，`primaryContainer`/`secondary`/`tertiary` 在米黄/夜间下仍是蓝色 |
+| 8 | 状态栏图标踩空 | 用 `!dark` 判断图标颜色 → "浅色模式 + 夜间纸"时深底配深图标，看不见 |
+| 9 | 无障碍几乎为零 | 只有 4 处 `contentDescription`；Slider、主题 chip、目录行、命中行、删除键全缺；无 `stateDescription` |
+| 10 | 动效只有三处 alpha | 顶栏、内容、字号浮层；无过渡、无指示器、无按下反馈 |
+| 11 | 固定高度遇字体放大必截断 | `TabChipHeight = 30.dp`、chip 36dp 都是硬约束 |
+| 12 | 没有主列表页 | 未打开文档时直接是空态页（品牌 + 按钮 + 最近 8 条），没有"首页"这一层 |
+
+### 6.2 设计系统（把令牌变成唯一来源）
+
+- `ui/Design.kt` 补齐：`Radius.l`(28dp)、`Type.heading`(20sp)、`Elevation`(flat/card/sheet/overlay)、
+  `Motion`(fast 120 / base 180 / slow 260)、`Hairline`(1dp)、`SheetListMaxHeight`(420dp)，
+  透明度收成 9 档语义令牌（`faint` / `disabled` / `selected` / `soft` / `decorative` / `hairline` / `progress` / `overlay` / `scrim`）
+- `ui/Theme.kt` 新增 `AppTypography`（12 档，含行高与字距）与 `AppShapes`，`AppTheme` 三个参数一起给 `MaterialTheme` ——
+  M3 的 `Slider`/`DropdownMenu`/`ModalBottomSheet` 从此与自绘组件同圆角同字阶
+- `withPaper` 补齐米黄/夜间两套的 `primary`/`primaryContainer`/`outline` 系；
+  状态栏图标改按 `scheme.background.luminance() > 0.5f` 反色
+- `ui/Icons.kt` 从 6 个图标扩到 20 个（Back/Chevron/Check/Tune/Bookmark/File/Folder/Sun/Moon/Paper/FontMinus/FontPlus/Trash/Stack/SearchOff…），
+  全部 Canvas 直绘 —— 实测引 `painterResource` 会 +70KB、引 `ImageVector` +39KB，与"体积量级不变"的要求冲突
+- `ui/Components.kt` 新建 14 个公共件：`SheetDragHandle` / `SheetHeader` / `IconAction`(48dp) /
+  `SettingCard` / `SectionLabel` / `HairlineDivider` / `ChoiceChip`(≥48dp + `Role.RadioButton`) /
+  `PrimaryAction` / `SecondaryAction` / `EmptyHint` / `MetaBadge` / `TypeBadge` / `SearchField`
+- 设计规范落成文档：[docs/design-system.md](design-system.md)（12 章：颜色 / 字阶 / 间距 / 形状 / 层级 / 图标 / 动效 / 组件 / 无障碍 / 逐屏线框 / 自查清单）
+
+### 6.3 逐屏改动
+
+| 屏 | 改了什么 | 为什么 |
+|---|---|---|
+| 首页（新 `ui/HomeScreen.kt`，删除 `ui/EmptyView.kt`） | 品牌头 + 主操作 + 最近打开卡片列表（类型徽标 + 格式名 + 相对时间 + 48dp 删除键）+ 格式说明；整页可滚动；打开失败改为页内错误横幅（`errorContainer` + 左侧竖条） | 原来只有"品牌 + 按钮 + 裸列表"，横屏/分屏时溢出且无法滚动；错误与主按钮抢位置 |
+| 阅读器（`ui/ReaderScreen.kt` + `ui/ReaderChrome.kt`） | 进度线合并为底栏顶部一条 2dp 轨道（带 `tween`）；`ReaderTopBarHeight`/`BottomBarHeight`/`ReaderBottomContentInset` 三个常量收口；页首元信息加格式名与字数；底栏活跃项加 `primaryContainer` 底；字号浮层加 `A-`/`A+` 与当前值；加载态加文案 | 原来 52dp 是三处手写常量、进度线画在内容层、页首只有标题没有文档信息 |
+| 标签条（`ui/DocTabs.kt`） | 高度 30→48dp、宽度上限 160→200dp、选中项 `primaryContainer`、`Role.Tab` + `selected` 语义、关闭键 48×48dp、底部发丝线与内容分隔 | 30dp 硬高度在系统字体放大后必然截断；关闭键命中区约 20×16dp |
+| 四类面板（目录 / 搜索 / 书签 / 设置） | 统一 `SheetDragHandle` → `SheetHeader`（标题 + 计数 + 关闭）→ 内容；输入框换成填充式 `SearchField`；空态统一 `EmptyHint`；行高统一 ≥48dp；设置页三张重复卡片抽成 `SettingCard` | 四处各写一套标题行与空态，内边距与字号互不相同 |
+| 搜索面板 | 命中片段围绕每处命中取窗口 + 关键词淡色高亮 + `§N` 徽标 | 原窗口从块首取 60 字，同段多次命中时几行片段完全一样，无法判断该点哪条（1.3.1 修复） |
+| 幻灯片 / PDF 全屏（`ui/SlideDeckView.kt` / `ui/PdfFullscreenOverlay.kt`） | 卡片改 `Shapes.card` + 发丝描边；页码改胶囊；全屏顶部信息条改单行 + 右侧 48dp 关闭键 | 原来页码是裸文字叠在图上，深色版式下会读不出来 |
+
+### 6.4 收尾修复（1.3.1）
+
+| 缺陷 | 位置 | 修法 |
+|---|---|---|
+| 单文档时章节名与状态栏时间重叠（截图实锤） | `ui/ReaderScreen.kt` / `ui/ReaderChrome.kt` / `ui/ReaderRoot.kt` | 新增 `reserveStatusBar` 参数，按它算 `topInset` 并加到 `contentPadding.top` 与 `TopBar`；多开时标签条已吃过一次状态栏，传 `false` 防双份留白 |
+| 首页底部残留 4 个无效图标 | `ui/ReaderScreen.kt` | `hasContent = blocks.isNotEmpty() \|\| slides != null` 门控顶栏、底栏、字号浮层 |
+| 搜索片段重复 | `md/SearchIndex.kt` / `ui/SearchSheet.kt` | `SearchHit` 加 `contextOffset`/`contextClippedEnd`，窗口改为围绕命中各取两侧 40 字 |
+| Release 编译告警 | `ui/Icons.kt` | 删掉 `Frame` 从未使用的 `tint` 形参 |
+
+### 6.5 本批验证
+
+```bash
+cd /e/code/project/vibe/AllView
+JAVA_HOME='D:\jdk17' /d/gradle/gradle-8.7/bin/gradle :app:testDebugUnitTest :app:assembleRelease --offline --console=plain
+```
+
+| 项 | 结果 |
+|---|---|
+| tests / suites / failures | **264 / 36 / 0** |
+| 前两批的 249 条 | 全部通过，一条未改未删 |
+| 新增 15 条 | `DesignTokensTest` 9 条（间距/圆角/字阶单调、透明度范围、触摸目标 48dp、相对时间分档、字数千分位、格式名全覆盖）+ `SearchSnippetTest` 6 条 |
+| `assembleRelease` | BUILD SUCCESSFUL，APK **1,384,871 字节**（1.2.1 为 1,398,387，同量级略小） |
+| Release 编译告警 | 0 |
+| 模拟器逐屏走查 | 首页 / 阅读器 / 目录 / 字号浮层 / 设置 / 搜索 / Excel / PPTX / PDF / PDF 全屏，覆盖浅色、深色、米黄、夜间四套，截图见 `docs/shot-*.png` |
+
+仍有一处按"可能影响行为先标注"的原则保留：`ui/MdRenderer.kt` 里 `SelectionContainer` 与 `detectTapGestures(onLongPress)` 共存，
+长按正文会先弹系统复制菜单，`onLongPressBlock` 难以直接触发（模拟器复现确认）。这是既有行为，本批未改。
+
 

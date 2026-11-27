@@ -13,52 +13,68 @@
 | 技术栈 | Kotlin + Jetpack Compose（Material 3） |
 | minSdk / targetSdk / compileSdk | 24 / 34 / 34 |
 | 解析内核 | commonmark-java 0.22.0 + GFM Tables |
-| 当前版本 | **1.3.0**（versionCode 4） |
-| release APK 实测体积 | **1.33 MB**（1,398,387 字节；R8 + 资源压缩，含 PPTX 表格/公式/图表渲染与 PDF 目录修复） |
+| 当前版本 | **1.3.1**（versionCode 5） |
+| release APK 实测体积 | **1.32 MB**（1,384,871 字节；R8 + 资源压缩，含 PPTX 表格/公式/图表渲染与 PDF 目录修复） |
 | debug APK 实测体积 | 7.8 MB（不裁剪，仅用于调试） |
 | 冷启动（Pixel 后端 API 34 模拟器，host GPU） | **302–505 ms**（`Displayed` 打点） |
 | 9.2 万字文档打开到首屏可读 | 约 3.4 s（含 `uiautomator` 轮询开销） |
-| 单测 | **258/258**（原有 198 条全部保留并通过；44 条覆盖编解码、偏好/进度存储、会话 uri、错误文案、块 key、加载态映射，7 条覆盖大图采样解码，9 条覆盖设计令牌与展示文案 —— 详见 [docs/refactor-report.md](docs/refactor-report.md)） |
+| 单测 | **264/264**（原有 198 条全部保留并通过；44 条覆盖编解码、偏好/进度存储、会话 uri、错误文案、块 key、加载态映射，7 条覆盖大图采样解码，9 条覆盖设计令牌与展示文案，6 条覆盖搜索片段窗口 —— 详见 [docs/refactor-report.md](docs/refactor-report.md)） |
 | 设计规范 | [docs/design-system.md](docs/design-system.md)（颜色 / 字阶 / 间距 / 圆角 / 图标 / 动效 / 无障碍 / 逐屏规范） |
 
 ## 一、界面截图
 
-| 深色模式 | 表格 + 图片 |
+截图为 **1.3.1 实机（Pixel API 34 / 1080×2340）** 拍摄，与当前代码一致。
+
+### 首页
+
+| 空态 | 最近打开 |
 |---|---|
-| ![深色模式](docs/01-dark.png) | ![表格与图片](docs/02-table-image.png) |
+| ![首页空态](docs/shot-home-light.png) | ![首页最近打开](docs/shot-home-recent.png) |
 
-| 首启空态 | 浅色长文 |
+![首页深色](docs/shot-home-dark.png)
+
+品牌头 + 主操作 + 最近文件卡片（类型徽标 / 格式名 / 相对时间）+ 格式说明，整页可滚动。
+
+### 阅读器
+
+| 浅色（LaTeX 排版） | 深色 |
 |---|---|
-| ![首启空态](docs/03-empty.png) | ![浅色长文](docs/04-book-light.png) |
+| ![阅读器浅色](docs/shot-reader-light.png) | ![阅读器深色](docs/shot-reader-dark.png) |
 
-| 浅色 · 图标化底栏 | 深色 |
+| 代码块 + 表格 + 图片 | 全文搜索 |
 |---|---|
-| ![浅色界面](docs/08-ui-light.png) | ![深色界面](docs/06-ui-dark.png) |
+| ![代码块与表格](docs/shot-md-code.png) | ![全文搜索](docs/shot-search.png) |
 
-![字号浮层](docs/07-font-panel.png)
+公式为原生排版（分式、上下标、求最值上下限、定界符、根号、重音、希腊字母与关系符），不走 WebView；
+表格按真实列宽折行，长文本不溢出；搜索命中片段高亮关键词并各自定位到命中处。
 
-| 标题层级（H2 通丝线） | 代码块与表格 |
+### 纸张主题
+
+| 米黄（浅色） | 夜间（浅色模式） |
 |---|---|
-| ![标题层级](docs/09-typography.png) | ![代码块与表格](docs/10-code-table.png) |
+| ![米黄纸张](docs/shot-reader-sepia.png) | ![夜间纸张](docs/shot-reader-night.png) |
 
-| 米黄纸张 | 夜间纸张 |
+![深色 + 米黄纸张](docs/shot-reader-sepia-dark.png)
+
+### 面板
+
+| 目录 | 字号浮层 |
 |---|---|
-| ![米黄](docs/11-sepia.png) | ![夜间](docs/12-night.png) |
+| ![目录](docs/shot-toc.png) | ![字号浮层](docs/shot-font.png) |
 
-![目录跟随当前章节](docs/13-toc-follow.png)
+![阅读设置](docs/shot-settings.png)
 
-### PPTX 渲染（1.2.0 新增）
+### 格式
 
-| 表格、配色与图表 | 公式与表格 |
+| Excel | PPTX |
 |---|---|
-| ![PPTX 表格](docs/14-pptx-table.png) | ![PPTX 公式](docs/15-pptx-math.png) |
+| ![Excel](docs/shot-xlsx.png) | ![PPTX](docs/shot-pptx.png) |
 
-表格按真实列宽折行，长文本不溢出；公式走 OMML → LaTeX → 语法树渲染；
-深色版式自动反色，柱状图按 `c:barChart` 数据绘制。
+| PDF | PDF 全屏看图 |
+|---|---|
+| ![PDF](docs/shot-pdf.png) | ![PDF 全屏](docs/shot-pdf-fullscreen.png) |
 
-![LaTeX 公式渲染](docs/05-math.png)
-
-分式、上下标、求最值的上下限、定界符、根号、重音、希腊字母与关系符均为原生排版，不走 WebView。
+PPTX 深色版式自动反色，柱状图按 `c:barChart` 数据绘制，公式走 OMML → LaTeX → 语法树渲染。
 
 截图位于 [`docs/`](docs/)，用仓库相对路径引用（`![说明](docs/文件名.png)`），无需外部图床。
 
@@ -74,12 +90,12 @@ AllView/
 │   ├── gradle-wrapper.jar
 │   └── gradle-wrapper.properties        # Gradle 8.7
 ├── local.properties                     # sdk.dir 指向本机 SDK（不入库）
-├── docs/                                # 真机/模拟器实测截图
-│   ├── 01-dark.png                      # 深色模式
-│   ├── 02-table-image.png               # 表格 + 图片
-│   ├── 03-empty.png                     # 首启空态
-│   ├── 04-book-light.png                # 浅色模式长文
-│   ├── 05-math.png                      # LaTeX 公式渲染
+├── docs/                                # 实机/模拟器实测截图与设计文档
+│   ├── design-system.md                 # 设计规范（颜色/字阶/间距/形状/图标/动效/无障碍/逐屏）
+│   ├── shot-home-*.png                  # 首页：空态 / 最近打开 / 深色
+│   ├── shot-reader-*.png                # 阅读器：浅色 / 深色 / 米黄 / 夜间
+│   ├── shot-*.png                        # 代码表格、搜索、目录、字号、设置、Excel、PPTX、PDF
+│   ├── refactor-report.md               # 逆向分析与重构报告
 │   ├── manual-1-git-bash.md             # Git Bash 终端操作手册
 │   └── manual-2-sidebar-git.md          # 侧边栏 Git 操作手册
 ├── sample/
@@ -138,7 +154,8 @@ AllView/
             ├── RecentFilesTest.kt              # 6 个最近文件单测
             ├── ExternalOpenTest.kt             # 6 个外部打开判据单测
             ├── DesignTokensTest.kt             # 9 个设计令牌 / 展示文案单测
-            └── ……共 35 个测试类、258 条用例
+            ├── SearchSnippetTest.kt            # 6 个搜索片段窗口单测
+            └── ……共 36 个测试类、264 条用例
 ```
 
 ## 一·五、界面与设计系统
@@ -260,15 +277,15 @@ Windows 用 `gradlew.bat`；本地无 Gradle 时 wrapper 会自行下载 8.7。
 版本号的**唯一来源**是 `app/build.gradle.kts`:
 
 ```kotlin
-versionCode = 4
-versionName = "1.3.0"
+versionCode = 5
+versionName = "1.3.1"
 ```
 
 发版流程（三处会自动对齐，无需手改文档里的版本串）：
 
 1. 改 `versionCode`（整数递增）与 `versionName`
 2. 在 [CHANGELOG.md](CHANGELOG.md) 顶部加一节
-3. 提交后打 tag 并推送：`git tag -a v1.3.0 -m "..." && git push origin v1.3.0`
+3. 提交后打 tag 并推送：`git tag -a v1.3.1 -m "..." && git push origin v1.3.1`
 
 推送 `v*` tag 会触发 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
 跑单测 → 构建 APK → 重命名为 `AllView-<版本>.apk` → 发布到 GitHub Release。
