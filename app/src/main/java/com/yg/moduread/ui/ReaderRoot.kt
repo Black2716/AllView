@@ -148,7 +148,10 @@ fun ReaderRoot(vm: ReaderViewModel) {
                 onJumpConsumed = vm::consumeJump,
                 recent = recent,
                 onOpenRecent = { uri -> runCatching { Uri.parse(uri) }.getOrNull()?.let(vm::open) },
-                onForgetRecent = vm::forgetRecent
+                onForgetRecent = vm::forgetRecent,
+                // 标签条（sessions.size >= 2 时才出现）自己带 statusBars 内边距，
+                // 阅读器这时不要再让一次，否则正文顶部会多空一行。
+                reserveStatusBar = sessions.size < 2
             )
         }
 

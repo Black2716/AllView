@@ -179,11 +179,19 @@ internal fun DocTitle(doc: DocumentState, fontSize: Float) {
  * 底边发丝线与正文之间正好是设计好的呼吸距离。
  */
 @Composable
-internal fun TopBar(title: String, progress: Float, modifier: Modifier) {
+internal fun TopBar(
+    title: String,
+    progress: Float,
+    modifier: Modifier,
+    topPadding: Dp = 0.dp
+) {
     Column(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
         Row(
             Modifier
                 .fillMaxWidth()
+                // 顶栏是叠在内容上的浮层，必须自己让出状态栏：
+                // 否则章节名会和状态栏的时间/电量印在同一行上。
+                .padding(top = topPadding)
                 .height(ReaderTopBarHeight)
                 .padding(horizontal = ReaderGutter),
             verticalAlignment = Alignment.CenterVertically

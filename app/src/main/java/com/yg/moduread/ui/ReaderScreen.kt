@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -69,12 +70,22 @@ fun ReaderScreen(
     onForgetRecent: (String) -> Unit = {},
     /** 一次性跳转目标（列表 item 下标）。消费后必须调 onJumpConsumed 清空。 */
     jumpTarget: Int? = null,
-    onJumpConsumed: () -> Unit = {}
+    onJumpConsumed: () -> Unit = {},
+    /** 上方是否已经有标签条替正文让出了状态栏。多开时标签条已经吃过一次状态栏， */
+    /** 这里再让一次就是双份留白（实测多开时正文顶部比单文档多空一行）。 */
+    reserveStatusBar: Boolean = true
 ) {
     // 只取一次安全区：改造前这里连调两次 asPaddingValues()，
     // 又另有一个 insets 变量，同一个值有三种取法，容易改漏。
     val insets = WindowInsets.safeDrawing.asPaddingValues()
     val bottomInsets = insets.calculateBottomPadding()
+    // 顶栏与正文都要让出状态栏。改造前只有多开标签条做了这件事，
+    // 单文档时正文直接顶到状态栏底下，章节名会和时间/电量重叠。
+    val topInset = if (reserveStatusBar) {
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    } else {
+        0.dp
+    }
     val listState = rememberLazyListState()
     // 一级标题已作为页首大标题呈现，正文里去掉同一份，避免重复
     val body = remember(doc.blocks) {
@@ -83,6 +94,11 @@ fun ReaderScreen(
             else -> doc.blocks
         }
     }
+    // 有内容才显示阅读器的顶栏/底栏。
+    // 首页（还没有打开文档）本身是完整的一屏，底下再挂一条只有图标的底栏，
+    // 会让人以为「目录/搜索/字号」在这里也能用 —— 实际上它们都依赖已加载的文档。
+    val hasContent = doc.blocks.isNotEmpty() || doc.slides != null
+
     // 滚动后顶部栏淡入，停在顶部时隐藏，把版面还给文字。
     // 带 docUri 作 key：切换文档时列表位置会被重置，顶栏状态也要跟着归位。
     val showBar by remember(doc.docUri) {
@@ -239,7 +255,7 @@ fun ReaderScreen(
                         // 顶栏是叠在内容上的（滚动后才淡入），必须预留它的完整高度，
                         // 否则首行文字会被顶栏压住。改造前这里写死 56.dp，
                         // 与 ReaderTopBarHeight 是两个各自维护的数。
-                        top = ReaderTopBarHeight,
+                        top = ReaderTopBarHeight + topInset,
                         bottom = ReaderBottomContentInset + insets.calculateBottomPadding()
                     )
                 ) {
@@ -272,17 +288,18 @@ fun ReaderScreen(
             animationSpec = tween(150),
             label = "topBarAlpha"
         )
-        if (topBarAlpha > 0.01f) {
+        if (hasContent && topBarAlpha > 0.01f) {
             TopBar(
                 title = currentTitle,
                 progress = progress,
+                topPadding = topInset,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .graphicsLayer { alpha = topBarAlpha }
             )
         }
         // 进度线的绘制已并入 ReaderBottomBar 顶部轨道（一条即可，两处会画两条）
-        ReaderBottomBar(
+        if (hasContent) ReaderBottomBar(
             fontPanelOpen = fontPanelOpen,
             onToggleFontPanel = { fontPanelOpen = !fontPanelOpen },
             onOpenSettings = onOpenSettings,
@@ -310,7 +327,7 @@ fun ReaderScreen(
             animationSpec = tween(160),
             label = "fontPanelShift"
         )
-        if (fontPanelOpen || panelAlpha > 0.01f) {
+        if (hasContent && (fontPanelOpen || panelAlpha > 0.01f)) {
             Box(
                 Modifier
                     .align(Alignment.BottomCenter)
