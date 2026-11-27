@@ -6,8 +6,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +28,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
@@ -47,7 +53,7 @@ fun PdfFullscreenOverlay(
     Box(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.97f))
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = Alpha.scrim))
             .pointerInput(Unit) {
                 detectTapGestures { onDismiss() }
             }
@@ -71,21 +77,40 @@ fun PdfFullscreenOverlay(
                     translationY = offset.y
                 }
         )
-        Text(
-            text = if (scale > 1.01f) {
-                label + "   " + (scale * 100).toInt() + "%"
-            } else {
-                label + "   双指缩放 · 点任意处关闭"
-            },
-            fontSize = Type.label,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
+        // 顶部信息条：页码/缩放百分比 + 一个明确的关闭键。
+        // 改造前只有一行浮动文字「点任意处关闭」—— 读屏用户既读不到也点不到，
+        // 且放大后看不清提示就只能杀进程。
+        Row(
+            Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 48.dp)
-                .clip(Shapes.chip)
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f))
-                .padding(horizontal = Sp.m, vertical = Sp.xs)
-        )
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(start = Sp.l, end = Sp.s, top = Sp.s),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (scale > 1.01f) {
+                    label + "   " + (scale * 100).toInt() + "%"
+                } else {
+                    label + "   双指缩放"
+                },
+                fontSize = Type.label,
+                color = MaterialTheme.colorScheme.inverseOnSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(Shapes.chip)
+                    .background(MaterialTheme.colorScheme.inverseSurface.copy(alpha = Alpha.progress))
+                    .padding(horizontal = Sp.m, vertical = Sp.xs)
+            )
+            IconAction(
+                description = "关闭全屏查看",
+                onClick = onDismiss,
+                tint = MaterialTheme.colorScheme.inverseOnSurface,
+                draw = { tint -> MiIcons.Close(tint, 18.dp) }
+            )
+        }
     }
 }
 

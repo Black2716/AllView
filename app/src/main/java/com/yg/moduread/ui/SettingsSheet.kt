@@ -1,30 +1,20 @@
 package com.yg.moduread.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.yg.moduread.R
 
 /**
  * 阅读设置。
@@ -32,6 +22,12 @@ import com.yg.moduread.R
  * 改造前是手写 Box + Color.Black(0.35f) 遮罩自制的底部面板，
  * 和目录/搜索用的 ModalBottomSheet 是两套观感（无拖拽手柄、圆角动画、遮罩浓度都不同）。
  * 现在统一成 ModalBottomSheet，三个面板同一套动效与遮罩。
+ *
+ * 第二轮外观改造：
+ *  - 三张卡片原本各写一遍 clip+background+padding，改用 SettingCard（带 1dp 描边分层）；
+ *  - 外观/纸张的六个胶囊原本是两份几乎相同的 ThemeChip / PaperChip，
+ *    高度约 36dp、选中态只换底色、读屏读不出选中 —— 统一换 ChoiceChip；
+ *  - 面板原先没有标题栏和关闭键，只能下滑收起，补 SheetHeader。
  */
 @Composable
 fun SettingsSheet(
@@ -42,121 +38,80 @@ fun SettingsSheet(
     onDismiss: () -> Unit
 ) {
     AppSheet(onDismiss = onDismiss) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Sp.l)
-                .padding(bottom = Sp.xl)
-        ) {
-            SectionTitle("显示")
-            Spacer(Modifier.height(Sp.s))
-
-            // 字号卡片
+        Column(Modifier.fillMaxWidth()) {
+            SheetHeader(title = "阅读设置", onClose = onDismiss)
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .clip(Shapes.card)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .padding(horizontal = Sp.m, vertical = Sp.m)
+                    .padding(horizontal = Sp.l)
+                    .padding(bottom = Sp.xl)
             ) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "字号",
-                        fontSize = Type.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = prefs.fontSizeSp.toInt().toString() + " sp",
-                        fontSize = Type.body,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                SettingCard(title = "字号") {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = prefs.fontSizeSp.toInt().toString() + " sp",
+                            fontSize = Type.body,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "预览文字大小",
+                            fontSize = Type.label,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 两端放 A 图标，比光秃秃一条轨道更直观
+                        Text(
+                            text = "A",
+                            fontSize = Type.label,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Slider(
+                            value = prefs.fontSizeSp,
+                            onValueChange = onFontChange,
+                            valueRange = ReaderPrefs.MIN_FONT..ReaderPrefs.MAX_FONT,
+                            steps = (ReaderPrefs.MAX_FONT - ReaderPrefs.MIN_FONT).toInt() - 1,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = Sp.s)
+                        )
+                        Text(
+                            text = "A",
+                            fontSize = Type.title,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // 两端放 A 图标，比光秃秃一条轨道更直观
-                    Text(
-                        text = "A",
-                        fontSize = Type.label,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Slider(
-                        value = prefs.fontSizeSp,
-                        onValueChange = onFontChange,
-                        valueRange = ReaderPrefs.MIN_FONT..ReaderPrefs.MAX_FONT,
-                        steps = (ReaderPrefs.MAX_FONT - ReaderPrefs.MIN_FONT).toInt() - 1,
-                        modifier = Modifier.weight(1f).padding(horizontal = Sp.s)
-                    )
-                    Text(
-                        text = "A",
-                        fontSize = Type.title,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+
+                Spacer(Modifier.height(Sp.m))
+
+                SettingCard(title = "外观") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Sp.s)) {
+                        ThemeChip("跟随系统", ThemeMode.SYSTEM, prefs.themeMode, onThemeChange, Modifier.weight(1f))
+                        ThemeChip("浅色", ThemeMode.LIGHT, prefs.themeMode, onThemeChange, Modifier.weight(1f))
+                        ThemeChip("深色", ThemeMode.DARK, prefs.themeMode, onThemeChange, Modifier.weight(1f))
+                    }
                 }
-            }
 
-            Spacer(Modifier.height(Sp.m))
+                Spacer(Modifier.height(Sp.m))
 
-            // 外观卡片
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(Shapes.card)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .padding(horizontal = Sp.m, vertical = Sp.m)
-            ) {
-                Text(
-                    text = "外观",
-                    fontSize = Type.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(Sp.s))
-                Row(horizontalArrangement = Arrangement.spacedBy(Sp.s)) {
-                    ThemeChip("跟随系统", ThemeMode.SYSTEM, prefs.themeMode, onThemeChange, Modifier.weight(1f))
-                    ThemeChip("浅色", ThemeMode.LIGHT, prefs.themeMode, onThemeChange, Modifier.weight(1f))
-                    ThemeChip("深色", ThemeMode.DARK, prefs.themeMode, onThemeChange, Modifier.weight(1f))
-                }
-            }
-
-            Spacer(Modifier.height(Sp.m))
-
-            // 纸张色调：底色微调，与深/浅正交
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(Shapes.card)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .padding(horizontal = Sp.m, vertical = Sp.m)
-            ) {
-                Text(
-                    text = "纸张",
-                    fontSize = Type.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(Sp.s))
-                Row(horizontalArrangement = Arrangement.spacedBy(Sp.s)) {
-                    PaperChip("纸白", ReadingTheme.PAPER, prefs.readingTheme, onReadingThemeChange, Modifier.weight(1f))
-                    PaperChip("米黄", ReadingTheme.SEPIA, prefs.readingTheme, onReadingThemeChange, Modifier.weight(1f))
-                    PaperChip("夜间", ReadingTheme.NIGHT, prefs.readingTheme, onReadingThemeChange, Modifier.weight(1f))
+                SettingCard(title = "纸张") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(Sp.s)) {
+                        PaperChip("纸白", ReadingTheme.PAPER, prefs.readingTheme, onReadingThemeChange, Modifier.weight(1f))
+                        PaperChip("米黄", ReadingTheme.SEPIA, prefs.readingTheme, onReadingThemeChange, Modifier.weight(1f))
+                        PaperChip("夜间", ReadingTheme.NIGHT, prefs.readingTheme, onReadingThemeChange, Modifier.weight(1f))
+                    }
                 }
             }
         }
     }
 }
 
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        fontSize = Type.caption,
-        fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-}
-
-/** 纸张色调选项。选中态直接画出该纸张的底色，比纯文字更直观。 */
+/** 纸张色调选项。选中态同时画出该纸张的底色和描边，比纯文字更直观。 */
 @Composable
 private fun PaperChip(
     label: String,
@@ -165,39 +120,18 @@ private fun PaperChip(
     onSelect: (ReadingTheme) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val selected = theme == current
     val swatch = when (theme) {
         ReadingTheme.PAPER -> Color(0xFFFCFCFA)
         ReadingTheme.SEPIA -> Color(0xFFF6F1E4)
         ReadingTheme.NIGHT -> Color(0xFF1B1A18)
     }
-    Row(
-        modifier
-            .clip(Shapes.chip)
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceContainerHighest
-            )
-            .clickable { onSelect(theme) }
-            .padding(vertical = Sp.s + 2.dp, horizontal = Sp.s),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier
-                .size(10.dp)
-                .clip(Shapes.pill)
-                .background(swatch)
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = label,
-            fontSize = Type.body,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+    ChoiceChip(
+        label = label,
+        selected = theme == current,
+        onClick = { onSelect(theme) },
+        modifier = modifier,
+        swatch = swatch
+    )
 }
 
 @Composable
@@ -208,24 +142,10 @@ private fun ThemeChip(
     onSelect: (ThemeMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val selected = mode == current
-    Box(
-        modifier
-            .clip(Shapes.chip)
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceContainerHighest
-            )
-            .clickable { onSelect(mode) }
-            .padding(vertical = Sp.s + 2.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            fontSize = Type.body,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+    ChoiceChip(
+        label = label,
+        selected = mode == current,
+        onClick = { onSelect(mode) },
+        modifier = modifier
+    )
 }

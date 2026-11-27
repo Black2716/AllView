@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -215,7 +213,7 @@ fun ReaderScreen(
                     bottomInset = insets.calculateBottomPadding()
                 )
             }
-            doc.blocks.isEmpty() -> EmptyView(
+            doc.blocks.isEmpty() -> HomeScreen(
                 error = doc.error,
                 recent = recent,
                 onPickFile = onPickFile,
@@ -238,7 +236,10 @@ fun ReaderScreen(
                         // 左右留白取令牌，改 ReaderGutter 即全站生效
                         start = ReaderGutter,
                         end = ReaderGutter,
-                        top = 56.dp,
+                        // 顶栏是叠在内容上的（滚动后才淡入），必须预留它的完整高度，
+                        // 否则首行文字会被顶栏压住。改造前这里写死 56.dp，
+                        // 与 ReaderTopBarHeight 是两个各自维护的数。
+                        top = ReaderTopBarHeight,
                         bottom = ReaderBottomContentInset + insets.calculateBottomPadding()
                     )
                 ) {
@@ -280,23 +281,7 @@ fun ReaderScreen(
                     .graphicsLayer { alpha = topBarAlpha }
             )
         }
-        // 进度线贴在底部栏正上方，2dp 高，不占布局高度（用 Box 叠放）
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = BottomBarHeight + bottomInsets)
-                .fillMaxWidth()
-                .height(2.dp)
-                .background(MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Box(
-                Modifier
-                    .fillMaxWidth(progress)
-                    .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = Alpha.progress))
-            )
-        }
-
+        // 进度线的绘制已并入 ReaderBottomBar 顶部轨道（一条即可，两处会画两条）
         ReaderBottomBar(
             fontPanelOpen = fontPanelOpen,
             onToggleFontPanel = { fontPanelOpen = !fontPanelOpen },
@@ -306,6 +291,7 @@ fun ReaderScreen(
             searchEnabled = doc.format.supportsSearch && doc.hasTextLayer,
             onOpenBookmarks = onOpenBookmarks,
             onPickFile = onPickFile,
+            progress = progress,
             bottomPadding = bottomInsets,
             modifier = Modifier.align(Alignment.BottomCenter)
         )

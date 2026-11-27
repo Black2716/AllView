@@ -9,27 +9,29 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -39,6 +41,13 @@ import com.yg.moduread.md.TocEntry
 /**
  * 目录抽屉。material3 自带 ModalBottomSheet，不引入任何第三方抽屉库。
  * 长文档（书稿 115 个标题）用 LazyColumn 只渲染可见项。
+ *
+ * 外观改造：
+ *  - 标题行原本是 20dp 裸内边距 + 8dp 裸间距，改走 SheetHeader（带关闭键，
+ *    面板只能下滑关闭的话，目录很长时手指会先滚到列表里）；
+ *  - 搜索框从 M3 OutlinedTextField 换成 SearchField（填充 + 描边，与全站一致）；
+ *  - 每行原本固定约 36dp 高（9dp 上下内边距），不合格；改 heightIn(min=48dp)，
+ *    缩进与竖线保留（层级是目录最重要的信息）。
  */
 @Composable
 fun TocSheet(
@@ -68,44 +77,23 @@ fun TocSheet(
     }
 
     AppSheet(onDismiss = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "目录",
-                    fontSize = Type.title,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = entries.size.toString() + " 个标题",
-                    fontSize = Type.caption,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            OutlinedTextField(
+        Column(Modifier.fillMaxWidth().padding(bottom = Sp.m)) {
+            SheetHeader(
+                title = "目录",
+                badge = entries.size.toString() + " 个标题",
+                onClose = onDismiss
+            )
+            SearchField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("在目录中查找", fontSize = Type.body) },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Sp.l, vertical = Sp.xs)
-                    .focusRequester(focus)
+                placeholder = "在目录中查找",
+                focusRequester = focus,
+                modifier = Modifier.padding(horizontal = Sp.l, vertical = Sp.xs)
             )
 
             // 当前所在章节 = 最后一个「起始块不晚于当前块」的标题。
             // 不能用 blockIndex == currentIndex 精确匹配：正文停在一个表格或代码块里时，
             // 那个位置根本不是任何标题的索引，精确匹配会导致整份目录一个都不高亮。
-            // 高亮规则：当前页停留的**第一个**条目。
-            //
-            // 多个目录项常指向同一页（PDF 很常见）。
-            // indexOfFirst 取该页首个条目，符合「我在这一页开头」的直觉；
-            // 找不到同页条目时退到「最后一个不超过当前页的条目」，
-            // 这样停在两章之间的正文里也能高亮到所属章节。
             // 高亮规则：当前页停留的**第一个**条目。
             //
             // 多个目录项常指向同一页（PDF 很常见）。
@@ -127,19 +115,16 @@ fun TocSheet(
             }
 
             if (shown.isEmpty()) {
-                Box(
-                    Modifier.fillMaxWidth().padding(vertical = Sp.xl),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "没有匹配「" + query.trim() + "」的标题",
-                        fontSize = Type.body,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                EmptyHint(
+                    title = "没有匹配「" + query.trim() + "」的标题",
+                    detail = "换个关键词，或清空后浏览完整目录"
+                )
             }
 
-            LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 8.dp)) {
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(horizontal = Sp.m, vertical = Sp.xs)
+            ) {
                 // key 必须全局唯一。
                 // PDF 目录里多个标题会指向同一页（blockIndex 相同），
                 // slug 又是空串，拼出来就是重复 key "6:"，
@@ -164,14 +149,19 @@ private fun TocRow(entry: TocEntry, active: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 1.dp)
+            .heightIn(min = MinTouchTarget)
             .clip(Shapes.chip)
             .background(
                 if (active) MaterialTheme.colorScheme.primaryContainer
                 else Color.Transparent
             )
             .clickable(onClick = onClick)
-            .padding(start = 8.dp + indent.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
+            .semantics {
+                // 读屏要知道「这是目录项、当前在读的是它」
+                role = Role.Tab
+                if (active) contentDescription = entry.text + "，当前章节"
+            }
+            .padding(start = Sp.s + indent.dp, end = Sp.m, top = Sp.xs, bottom = Sp.xs),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 一级标题加一条短竖线，方便扫读层级
@@ -180,13 +170,13 @@ private fun TocRow(entry: TocEntry, active: Boolean, onClick: () -> Unit) {
                 Modifier
                     .width(2.dp)
                     .height(14.dp)
-                    .clip(RoundedCornerShape(1.dp))
+                    .clip(Shapes.pill)
                     .background(
                         if (active) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.outline
                     )
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(Sp.s))
         }
         Text(
             text = entry.text,
@@ -196,7 +186,7 @@ private fun TocRow(entry: TocEntry, active: Boolean, onClick: () -> Unit) {
                 else -> Type.body
             },
             fontWeight = if (entry.level <= 2) FontWeight.Medium else FontWeight.Normal,
-            color = if (active) MaterialTheme.colorScheme.primary
+            color = if (active) MaterialTheme.colorScheme.onPrimaryContainer
             else MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis

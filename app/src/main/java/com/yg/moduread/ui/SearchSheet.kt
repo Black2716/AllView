@@ -2,7 +2,6 @@ package com.yg.moduread.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,11 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,10 +25,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,6 +40,12 @@ import com.yg.moduread.md.SearchIndex
  *
  * 搜索在 SearchIndex 上同步跑（一本书的纯文本约 60 KB，indexOf 是毫秒级），
  * 不需要协程也不需要在输入时防抖到奇怪的程度。
+ *
+ * 外观改造：
+ *  - 输入框换 SearchField，与目录面板同一套；
+ *  - 命中片段里把查询词高亮（改造前是一片纯灰文字，看不出为什么这条命中）；
+ *  - 命中行的「§N」原本只是版块序号，改成右侧的块号徽标，主信息让给片段；
+ *  - 空态从 26dp 内边距的一行字换成 EmptyHint（标题 + 说明）。
  */
 @Composable
 fun SearchSheet(
@@ -62,34 +63,38 @@ fun SearchSheet(
     }
 
     AppSheet(onDismiss = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
-            OutlinedTextField(
+        Column(Modifier.fillMaxWidth().padding(bottom = Sp.l)) {
+            SheetHeader(title = "全文搜索", badge = if (hits.isEmpty()) null else hits.size.toString() + " 处命中", onClose = onDismiss)
+            SearchField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("搜索全文", fontSize = Type.bodyLarge) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus)
+                placeholder = "搜索全文",
+                focusRequester = focus,
+                modifier = Modifier.padding(horizontal = Sp.l, vertical = Sp.xs)
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(Sp.s))
 
             when {
-                index == null -> Hint("文档还没加载完")
-                query.isBlank() -> Hint("输入至少 2 个字开始搜索")
-                query.trim().length < SearchIndex.MIN_QUERY -> Hint("再输入一个字")
-                hits.isEmpty() -> Hint("没有找到「" + query.trim() + "」")
+                index == null -> EmptyHint(title = "文档还没加载完", detail = "解析完成后即可搜索")
+                query.isBlank() -> EmptyHint(title = "输入关键词开始搜索", detail = "至少需要 " + SearchIndex.MIN_QUERY + " 个字")
+                query.trim().length < SearchIndex.MIN_QUERY ->
+                    EmptyHint(title = "再输入一个字", detail = "至少需要 " + SearchIndex.MIN_QUERY + " 个字")
+                hits.isEmpty() -> EmptyHint(
+                    title = "没有找到「" + query.trim() + "」",
+                    detail = "换个说法，或到目录里按章节浏览"
+                )
                 else -> {
-                    Text(
-                        text = if (hits.size >= 200) "命中超过 200 条，只显示前 200 条"
-                        else hits.size.toString() + " 处命中",
-                        fontSize = Type.caption,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    )
+                    if (hits.size >= 200) {
+                        Text(
+                            text = "命中超过 200 条，只显示前 200 条",
+                            fontSize = Type.label,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = Sp.l, bottom = Sp.xs)
+                        )
+                    }
                     LazyColumn(
-                        Modifier.heightIn(max = 420.dp),
-                        contentPadding = PaddingValues(bottom = 16.dp)
+                        Modifier.heightIn(max = SheetListMaxHeight),
+                        contentPadding = PaddingValues(horizontal = Sp.l, vertical = Sp.xs)
                     ) {
                         items(hits, key = { it.blockIndex.toString() + ":" + it.start }) { hit ->
                             HitRow(hit = hit, query = query.trim(), onClick = { onSelect(hit) })
@@ -97,48 +102,36 @@ fun SearchSheet(
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
         }
-    }
-}
-
-@Composable
-private fun Hint(text: String) {
-    Box(
-        Modifier.fillMaxWidth().padding(vertical = 26.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text, fontSize = Type.body, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
     }
 }
 
 @Composable
 private fun HitRow(hit: SearchHit, query: String, onClick: () -> Unit) {
-    Column(
+    val accent = MaterialTheme.colorScheme.primary
+    val highlight = MaterialTheme.colorScheme.primaryContainer
+    Row(
         Modifier
             .fillMaxWidth()
-            .padding(vertical = 1.dp)
+            .heightIn(min = MinTouchTarget)
+            .padding(vertical = 2.dp)
             .clip(Shapes.chip)
-            .background(MaterialTheme.colorScheme.surface)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 9.dp)
+            .padding(horizontal = Sp.m, vertical = Sp.s),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "§" + (hit.blockIndex + 1),
-                fontSize = Type.label,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = snippet(hit, query),
-                fontSize = Type.body,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        Text(
+            text = highlighted(snippet(hit, query), query, highlight, accent),
+            fontSize = Type.body,
+            lineHeight = (Type.body.value * 1.5f).sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(Modifier.width(Sp.s))
+        MetaBadge(text = "§" + (hit.blockIndex + 1))
     }
 }
 
@@ -155,4 +148,36 @@ private fun snippet(hit: SearchHit, query: String): String {
         val to = (at + len + 32).coerceAtMost(ctx.length)
         (if (from > 0) "…" else "") + ctx.substring(from, to) + (if (to < ctx.length) "…" else "")
     }
+}
+
+/**
+ * 把片段里的查询词涂成高亮底色。
+ *
+ * 改造前片段是一整块单色文字，同一段里命中三次也看不出来命中的是哪几个字 ——
+ * 用户只能读完整句再自己找。这里逐处标记（不区分大小写），
+ * 命中过多时最多标 20 处，避免整段变成色块。
+ */
+private fun highlighted(
+    text: String,
+    query: String,
+    background: androidx.compose.ui.graphics.Color,
+    foreground: androidx.compose.ui.graphics.Color
+) = buildAnnotatedString {
+    if (query.isEmpty() || text.isEmpty()) {
+        append(text)
+        return@buildAnnotatedString
+    }
+    var cursor = 0
+    var marked = 0
+    while (cursor < text.length && marked < 20) {
+        val at = text.indexOf(query, cursor, ignoreCase = true)
+        if (at < 0) break
+        append(text.substring(cursor, at))
+        withStyle(SpanStyle(background = background, color = foreground, fontWeight = FontWeight.Medium)) {
+            append(text.substring(at, at + query.length))
+        }
+        cursor = at + query.length
+        marked++
+    }
+    if (cursor < text.length) append(text.substring(cursor))
 }

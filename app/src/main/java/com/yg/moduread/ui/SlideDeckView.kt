@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,12 +50,13 @@ fun SlideDeckView(
         state = listState,
         modifier = modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = 12.dp,
-            end = 12.dp,
+            // 与正文同一套左右留白（改造前是 12dp，切到幻灯片后文字页会「横向跳一下」）
+            start = ReaderGutter,
+            end = ReaderGutter,
             // 顶部不再额外加留白：外层 Box 已经有 insets.calculateTopPadding()，
             // 这里再加 56dp 会叠成「进度条与切换栏之间出现一大段空隙」（实测反馈）。
-            top = 6.dp,
-            bottom = 150.dp + bottomInset
+            top = Sp.s,
+            bottom = ReaderBottomContentInset + bottomInset
         )
     ) {
         itemsIndexed(
@@ -87,8 +88,10 @@ private fun SlidePage(
             .padding(vertical = 6.dp)
             // 固定 16:9：PPT 是投影格式，比例固定才与 PowerPoint 观感一致
             .aspectRatio(if (aspectRatio > 0f) aspectRatio else 16f / 9f)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(Shapes.card)
             .background(MaterialTheme.colorScheme.surface)
+            // 描边而不投影：幻灯片是白底，靠一条发丝线就足以与页面背景分开
+            .border(Hairline, MaterialTheme.colorScheme.outlineVariant, Shapes.card)
     ) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -103,13 +106,17 @@ private fun SlidePage(
                }
             }
         )
+        // 页码做成胶囊压在右下角：白底幻灯片上直接写灰字容易被内容盖住
         Text(
             text = pageNo.toString() + " / " + total,
             fontSize = Type.label,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(8.dp)
+                .padding(Sp.s)
+                .clip(Shapes.pill)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = Alpha.overlay))
+                .padding(horizontal = Sp.s, vertical = 3.dp)
         )
     }
 }

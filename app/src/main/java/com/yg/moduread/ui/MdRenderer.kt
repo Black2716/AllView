@@ -217,7 +217,7 @@ private fun QuoteView(
                 .width(4.dp)
                 .fillMaxHeight()
                 .clip(Shapes.chip)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.65f))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = Alpha.decorative))
         )
         Column(Modifier.padding(start = Sp.l).fillMaxWidth()) {
             block.children.forEach { child ->
@@ -386,7 +386,7 @@ private fun TableView(block: MdBlock.Table, baseFontSize: Float, modifier: Modif
                 Modifier
                     .fillMaxWidth()
                     .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = Alpha.hairline))
             )
             TableRowView(row, columns, cellFont, fits, weights, fixedCellWidth, header = false)
         }
